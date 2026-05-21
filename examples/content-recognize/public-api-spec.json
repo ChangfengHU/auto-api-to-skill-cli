@@ -1,0 +1,63 @@
+{
+  "project_slug": "auto-content-recognize",
+  "repo_name": "auto-content-recognize-cli",
+  "display_name": "Auto Content Recognize",
+  "summary": "Wrap the image-recognize worker as a generated skill+cli project. Supports public URL recognition, screenshot URL recognition, and multipart file uploads.",
+  "source_kind": "public_api",
+  "endpoint": "https://image-recognize.hb67egcim4.workers.dev",
+  "auth": {
+    "type": "bearer",
+    "token_env": "CONTENT_RECOGNIZE_TOKEN",
+    "default_token": "yt-research-token-2026",
+    "help": "Bearer token for the image-recognize worker"
+  },
+  "request_modes": [
+    {
+      "name": "url",
+      "transport": "json",
+      "description": "Recognize a supported public URL such as YouTube or GitHub.",
+      "fields": [
+        {
+          "name": "url"
+        }
+      ]
+    },
+    {
+      "name": "screenshot-url",
+      "transport": "json",
+      "description": "Download a public screenshot URL and let the worker recognize the content.",
+      "fields": [
+        {
+          "name": "screenshot_url"
+        }
+      ]
+    },
+    {
+      "name": "file",
+      "transport": "multipart",
+      "description": "Upload an image file directly.",
+      "fields": [
+        {
+          "name": "file",
+          "file": true
+        }
+      ]
+    }
+  ],
+  "default_cli_args": "--mode=url --url='https://www.youtube.com/watch?v=Ahfe-BW1cFc' --token='YOUR_TOKEN'",
+  "cli_example": "bash <(curl -fsSL https://skill.vyibc.com/auto-content-recognize.sh) --mode=url --url='https://www.youtube.com/watch?v=Ahfe-BW1cFc' --token='YOUR_TOKEN'",
+  "examples": [
+    {
+      "label": "YouTube URL",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/auto-content-recognize.sh) --mode=url --url='https://www.youtube.com/watch?v=Ahfe-BW1cFc' --token='YOUR_TOKEN'"
+    },
+    {
+      "label": "GitHub Repo URL",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/auto-content-recognize.sh) --mode=url --url='https://github.com/owner/repo' --token='YOUR_TOKEN'"
+    },
+    {
+      "label": "Upload File",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/auto-content-recognize.sh) --mode=file --file='/path/to/screenshot.png' --token='YOUR_TOKEN'"
+    }
+  ]
+}

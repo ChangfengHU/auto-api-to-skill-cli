@@ -1,0 +1,32 @@
+{
+  "project_slug": "auto-local-echo",
+  "repo_name": "auto-local-echo-cli",
+  "display_name": "Auto Local Echo",
+  "summary": "Wrap a local HTTP echo service as a generated skill+cli project. Supports direct base-url calls or auto-domain exposure from a local port.",
+  "source_kind": "local_port",
+  "path": "/echo",
+  "request_modes": [
+    {
+      "name": "message",
+      "transport": "json",
+      "description": "Send a message payload to the local echo service.",
+      "fields": [
+        {
+          "name": "message"
+        }
+      ]
+    }
+  ],
+  "default_cli_args": "--mode=message --message='hello' --base-url='http://127.0.0.1:18090'",
+  "cli_example": "bash <(curl -fsSL https://skill.vyibc.com/auto-local-echo.sh) --mode=message --message='hello' --base-url='http://127.0.0.1:18090'",
+  "examples": [
+    {
+      "label": "Direct base URL",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/auto-local-echo.sh) --mode=message --message='hello' --base-url='http://127.0.0.1:18090'"
+    },
+    {
+      "label": "Expose a local port first",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/auto-local-echo.sh) --mode=message --message='hello' --port=18090 --domain-name=echo-demo --auto-domain-token='YOUR_AUTO_DOMAIN_TOKEN'"
+    }
+  ]
+}

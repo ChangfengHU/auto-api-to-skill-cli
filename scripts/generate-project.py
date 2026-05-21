@@ -508,14 +508,14 @@ def render_http_run(spec: dict, endpoint_expression: str, source_header: str, ex
             payload = textwrap.dedent(
                 f"""\
                 PAYLOAD=$({env_assign} python3 -c 'import json, os; keys = {keys_expr}; data = {{}}; [data.__setitem__(key, os.environ.get(key.upper().replace("-", "_").replace(".", "_")) or os.environ.get(key.upper().replace("-", "_"))) for key in keys if (os.environ.get(key.upper().replace("-", "_").replace(".", "_")) or os.environ.get(key.upper().replace("-", "_")))]; print(json.dumps(data))')
-                curl -fsSL "$ENDPOINT" "${{COMMON_HEADERS[@]}}" -H "Content-Type: application/json" -d "$PAYLOAD"
+                curl --fail-with-body -sS -L "$ENDPOINT" "${{COMMON_HEADERS[@]}}" -H "Content-Type: application/json" -d "$PAYLOAD"
                 """
             )
         else:
             form_lines = "\n".join(f'      -F "{name}=@${{{mode_var(name)}}}" \\' if field.get("file") else f'      -F "{name}=${{{mode_var(name)}}}" \\' for name, field in [(f["name"], f) for f in mode.get("fields", [])])
             payload = textwrap.dedent(
                 f"""\
-                  curl -fsSL "$ENDPOINT" "${{COMMON_HEADERS[@]}}" \\
+                  curl --fail-with-body -sS -L "$ENDPOINT" "${{COMMON_HEADERS[@]}}" \\
                 {form_lines}
                       | cat
                 """
@@ -566,6 +566,9 @@ def render_http_run(spec: dict, endpoint_expression: str, source_header: str, ex
         fi
 
         {pre_call.rstrip()}
+
+        TOKEN="${{TOKEN#Bearer }}"
+        TOKEN="${{TOKEN#bearer }}"
 
         ENDPOINT={endpoint_expression}
         if [[ -n "$ENDPOINT_OVERRIDE" ]]; then

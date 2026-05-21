@@ -678,6 +678,11 @@ def create_remote_repo(repo_dir: pathlib.Path, repo_name: str, owner: str, token
         check=True,
     )
     subprocess.run(["git", "push", "-u", "origin", "main"], cwd=repo_dir, check=True)
+    subprocess.run(
+        ["git", "remote", "set-url", "origin", f"https://github.com/{owner}/{repo_name}.git"],
+        cwd=repo_dir,
+        check=True,
+    )
     print(f"GITHUB_REPO={remote_url}")
 
 

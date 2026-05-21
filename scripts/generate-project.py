@@ -120,82 +120,86 @@ def render_publish_local(spec: dict) -> str:
     slug = spec["project_slug"]
     release_path = spec.get("release_path", f"{slug}/release")
     generate_cli = spec.get("generate_cli", True)
-    maybe_cli_upload = ""
-    maybe_cli_echo = ""
-    maybe_agent_upload = ""
+    upload_steps = []
+    echo_steps = []
     if generate_cli:
-        maybe_cli_upload = f"\"$ROOT_DIR/scripts/upload-file.sh\" --file \"$ROOT_DIR/skills/{slug}/scripts/run.sh\" --name \"${{SKILL_NAME}}.sh\" >/dev/null\n"
-        maybe_cli_echo = (
-            f'echo "CLI_COMMAND=bash <(curl -fsSL https://skill.vyibc.com/${{SKILL_NAME}}.sh) {spec.get("default_cli_args", "").strip()}"\n'
+        upload_steps.append(
+            f'"$ROOT_DIR/scripts/upload-file.sh" --file "$ROOT_DIR/skills/{slug}/scripts/run.sh" --name "${{SKILL_NAME}}.sh" >/dev/null'
+        )
+        echo_steps.append(
+            f'echo "CLI_COMMAND=bash <(curl -fsSL https://skill.vyibc.com/${{SKILL_NAME}}.sh) {spec.get("default_cli_args", "").strip()}"'
         )
     if spec.get("includes_agent"):
-        maybe_agent_upload = (
-            f"\"$ROOT_DIR/scripts/upload-file.sh\" --file \"$ROOT_DIR/skills/{slug}/agent/agent.js\" --name \"agent.js\" >/dev/null\n"
+        upload_steps.append(
+            f'"$ROOT_DIR/scripts/upload-file.sh" --file "$ROOT_DIR/skills/{slug}/agent/agent.js" --name "agent.js" >/dev/null'
         )
+    upload_block = "\n".join(upload_steps)
+    echo_block = "\n".join(echo_steps)
     return textwrap.dedent(
         f"""\
-        #!/usr/bin/env bash
-        set -euo pipefail
+#!/usr/bin/env bash
+set -euo pipefail
 
-        ROOT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")/.." && pwd)"
-        SKILL_NAME="{slug}"
-        WORK_DIR="$(mktemp -d /tmp/{slug}-skill-XXXXXX)"
-        trap 'rm -rf "$WORK_DIR"' EXIT
-        TS="$(date +%Y%m%d%H%M%S)"
-        RELEASE_PATH="{release_path}"
-        PUBLISH_SKILL_INSTALL_URL="${{PUBLISH_SKILL_INSTALL_URL:-https://skill.vyibc.com/install-publish-skill.sh}}"
+ROOT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")/.." && pwd)"
+SKILL_NAME="{slug}"
+WORK_DIR="$(mktemp -d /tmp/{slug}-skill-XXXXXX)"
+trap 'rm -rf "$WORK_DIR"' EXIT
+TS="$(date +%Y%m%d%H%M%S)"
+RELEASE_PATH="{release_path}"
+PUBLISH_SKILL_INSTALL_URL="${{PUBLISH_SKILL_INSTALL_URL:-https://skill.vyibc.com/install-publish-skill.sh}}"
 
-        cp -R "$ROOT_DIR/skills/$SKILL_NAME" "$WORK_DIR/$SKILL_NAME"
+cp -R "$ROOT_DIR/skills/$SKILL_NAME" "$WORK_DIR/$SKILL_NAME"
 
-        ZIP_FILE="$WORK_DIR/${{SKILL_NAME}}-${{TS}}.zip"
-        python3 - "$WORK_DIR" "$SKILL_NAME" "$ZIP_FILE" <<'PY'
-        import os
-        import sys
-        import zipfile
+ZIP_FILE="$WORK_DIR/${{SKILL_NAME}}-${{TS}}.zip"
+python3 - "$WORK_DIR" "$SKILL_NAME" "$ZIP_FILE" <<'PY'
+import os
+import sys
+import zipfile
 
-        root = sys.argv[1]
-        skill = sys.argv[2]
-        zip_path = sys.argv[3]
-        base = os.path.join(root, skill)
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-            for current, _, files in os.walk(base):
-                for name in files:
-                    path = os.path.join(current, name)
-                    arc = os.path.relpath(path, root)
-                    z.write(path, arc)
-        PY
+root = sys.argv[1]
+skill = sys.argv[2]
+zip_path = sys.argv[3]
+base = os.path.join(root, skill)
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+    for current, _, files in os.walk(base):
+        for name in files:
+            path = os.path.join(current, name)
+            arc = os.path.relpath(path, root)
+            z.write(path, arc)
+PY
 
-        ZIP_JSON="$("$ROOT_DIR/scripts/upload-file.sh" --file "$ZIP_FILE" --name "${{SKILL_NAME}}-${{TS}}.zip" --path "$RELEASE_PATH")"
-        ZIP_URL="$(printf '%s' "$ZIP_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("image_url",""))')"
-        ZIP_URL_TS="${{ZIP_URL}}?ts=${{TS}}"
+ZIP_JSON="$("$ROOT_DIR/scripts/upload-file.sh" --file "$ZIP_FILE" --name "${{SKILL_NAME}}-${{TS}}.zip" --path "$RELEASE_PATH")"
+ZIP_URL="$(printf '%s' "$ZIP_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("image_url",""))')"
+ZIP_URL_TS="${{ZIP_URL}}?ts=${{TS}}"
 
-        INSTALL_SCRIPT="$WORK_DIR/install-${{SKILL_NAME}}.sh"
-        PUBLISH_TEMPLATE="$WORK_DIR/install-publish-skill.sh"
-        curl -fsSL "$PUBLISH_SKILL_INSTALL_URL" -o "$PUBLISH_TEMPLATE"
+INSTALL_SCRIPT="$WORK_DIR/install-${{SKILL_NAME}}.sh"
+PUBLISH_TEMPLATE="$WORK_DIR/install-publish-skill.sh"
+curl -fsSL "$PUBLISH_SKILL_INSTALL_URL" -o "$PUBLISH_TEMPLATE"
 
-        python3 - "$PUBLISH_TEMPLATE" "$INSTALL_SCRIPT" "$SKILL_NAME" "$ZIP_URL_TS" <<'PY'
-        import pathlib
-        import re
-        import sys
+python3 - "$PUBLISH_TEMPLATE" "$INSTALL_SCRIPT" "$SKILL_NAME" "$ZIP_URL_TS" <<'PY'
+import pathlib
+import re
+import sys
 
-        src = pathlib.Path(sys.argv[1])
-        dst = pathlib.Path(sys.argv[2])
-        skill_name = sys.argv[3]
-        zip_url = sys.argv[4]
-        text = src.read_text()
-        text = re.sub(r'^SKILL_NAME="[^"]*"$', f'SKILL_NAME="{{skill_name}}"', text, flags=re.M)
-        text = re.sub(r'^ZIP_URL="[^"]*"$', f'ZIP_URL="{{zip_url}}"', text, flags=re.M)
-        text = re.sub(r'^(# Auto-generated one-click install script for: ).*$', rf'\\1{{skill_name}}', text, flags=re.M)
-        dst.write_text(text)
-        PY
+src = pathlib.Path(sys.argv[1])
+dst = pathlib.Path(sys.argv[2])
+skill_name = sys.argv[3]
+zip_url = sys.argv[4]
+text = src.read_text()
+text = re.sub(r'^SKILL_NAME="[^"]*"$', f'SKILL_NAME="{{skill_name}}"', text, flags=re.M)
+text = re.sub(r'^ZIP_URL="[^"]*"$', f'ZIP_URL="{{zip_url}}"', text, flags=re.M)
+text = re.sub(r'^(# Auto-generated one-click install script for: ).*$', rf'\\1{{skill_name}}', text, flags=re.M)
+dst.write_text(text)
+PY
 
-        chmod +x "$INSTALL_SCRIPT"
+chmod +x "$INSTALL_SCRIPT"
 
-        "$ROOT_DIR/scripts/upload-file.sh" --file "$INSTALL_SCRIPT" --name "install-${{SKILL_NAME}}.sh" >/dev/null
-        {maybe_cli_upload}{maybe_agent_upload}echo "SKILL_INSTALL_COMMAND=bash <(curl -fsSL 'https://skill.vyibc.com/install-${{SKILL_NAME}}.sh?ts=${{TS}}')"
-        {maybe_cli_echo}".rstrip()
+"$ROOT_DIR/scripts/upload-file.sh" --file "$INSTALL_SCRIPT" --name "install-${{SKILL_NAME}}.sh" >/dev/null
+{upload_block}
+echo "SKILL_INSTALL_COMMAND=bash <(curl -fsSL 'https://skill.vyibc.com/install-${{SKILL_NAME}}.sh?ts=${{TS}}')"
+{echo_block}
         """
-    )
+    ).rstrip() + "\n"
 
 
 def render_skill_md(spec: dict) -> str:

@@ -206,7 +206,7 @@ def render_skill_md(spec: dict) -> str:
     if spec.get("generate_cli", True):
         cli_block = textwrap.dedent(
             f"""\
-            ## CLI Equivalent
+            ## 直接执行
 
             ```bash
             {cli_example}
@@ -222,23 +222,23 @@ def render_skill_md(spec: dict) -> str:
 
         # {spec.get("display_name", slug_to_title(slug))}
 
-        ## Purpose
+        ## 作用
 
-        Use this skill when the user wants to call the `{slug}` service through a packaged local skill instead of constructing raw curl requests manually.
+        当用户希望把 `{slug}` 作为一个真正的 skill 安装到 agent 环境里，并通过统一参数调用它时，使用这个 skill。
 
-        ## Install
+        ## 安装
 
         ```bash
         bash <(curl -fsSL 'https://skill.vyibc.com/install-{slug}.sh?ts=...')
         ```
 
-        ## Runtime Source of Truth
+        ## 核心执行入口
 
         ```text
         skills/{slug}/scripts/run.sh
         ```
 
-        Both the installed skill and the published CLI entry are generated from this single script.
+        安装后的 skill 和对外发布的 CLI 都来自这一个脚本。
         
         {cli_block.rstrip()}
         """
@@ -247,7 +247,6 @@ def render_skill_md(spec: dict) -> str:
 
 def render_readme(spec: dict) -> str:
     slug = spec["project_slug"]
-    display = spec.get("display_name", slug_to_title(slug))
     generate_cli = spec.get("generate_cli", True)
     mode_lines = "\n".join(
         f"- `{mode['name']}`: {mode.get('description', '').strip()}" for mode in spec["request_modes"]
@@ -286,7 +285,7 @@ def render_readme(spec: dict) -> str:
     if generate_cli:
         direct_cli_section = textwrap.dedent(
             f"""\
-            ## Direct CLI
+            ## 1. 直接执行 CLI
 
             ```bash
             bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {spec.get("default_cli_args", "").strip()}
@@ -298,41 +297,57 @@ def render_readme(spec: dict) -> str:
         f"""\
         # {slug}
 
-        {spec["summary"]}
+        `{slug}` 用来封装 `{spec.get("endpoint", slug)}` 这个能力，对外提供两个主要入口：
+
+- 安装一个真正的 skill 到 agent 环境
+- 直接执行 CLI 调用这个 HTTP 接口
+
+{spec["summary"]}
 
         {direct_cli_section.rstrip()}
 
-        ## Skill Install
+        ## 2. 安装 skill
 
         ```bash
         bash <(curl -fsSL 'https://skill.vyibc.com/install-{slug}.sh?ts=...')
         ```
 
-        ## Request Modes
+        这个命令会把 `{slug}` 安装到目标 skill 目录，例如：
+
+- `~/.codex/skills/{slug}`
+- `~/.claude/skills/{slug}`
+- `~/.cursor/skills/{slug}`
+
+安装完成后，skill 内会包含：
+
+- `SKILL.md`
+- `scripts/run.sh`
+
+## 3. 支持的调用模式
 
         {mode_lines}
 
         {extra}
 
-        ## Examples
+        ## 4. 调用示例
 
         {examples_text}
 
-        ## Publish
+        ## 5. 发布
 
-        Local publish:
+        本地发布：
 
         ```bash
         ./scripts/publish-skill.sh
         ```
 
-        Remote publish from GitHub `main`:
+        从 GitHub `main` 远程发布：
 
         ```bash
         bash <(curl -fsSL https://skill.vyibc.com/publish-{slug}.sh)
         ```
 
-        ## Runtime Source
+        ## 6. 核心执行入口
 
         ```text
         skills/{slug}/scripts/run.sh

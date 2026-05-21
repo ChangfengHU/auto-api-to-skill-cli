@@ -1,6 +1,6 @@
 {
   "project_slug": "auto-content-recognize",
-  "repo_name": "auto-content-recognize-cli",
+  "repo_name": "auto-content-recognize-skill",
   "display_name": "Auto Content Recognize",
   "summary": "Wrap the image-recognize worker as a generated skill+cli project. Supports public URL recognition, screenshot URL recognition, and multipart file uploads.",
   "source_kind": "public_api",

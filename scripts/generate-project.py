@@ -511,123 +511,137 @@ def render_http_run(spec: dict, endpoint_expression: str, source_header: str, ex
     auth = spec.get("auth", {})
     token_env = auth.get("token_env", f"{mode_var(slug)}_TOKEN")
     default_token = auth.get("default_token", "")
-    token_help = auth.get("help", "API token")
     modes = spec["request_modes"]
+
     unique_fields: list[str] = []
     for mode in modes:
         for field in mode.get("fields", []):
-            name = field["name"]
-            if name not in unique_fields:
-                unique_fields.append(name)
+            if field["name"] not in unique_fields:
+                unique_fields.append(field["name"])
 
-    field_setup = "\n".join(f'{mode_var(name)}=""' for name in unique_fields)
-    parse_lines = []
-    for name in unique_fields:
-        flag = name.replace("_", "-")
-        parse_lines.append(f'    --{flag}=*) {mode_var(name)}="${{arg#--{flag}=}}" ;;')
-    mode_cases = []
-    auto_mode_lines = []
+    # auto-detect mode blocks — skip modes with no fields (can't infer them)
+    auto_mode_lines: list[str] = []
     for mode in modes:
-        field_names = [field["name"] for field in mode.get("fields", [])]
-        cond = " && ".join(f'[[ -n "${mode_var(name)}" ]]' for name in field_names) or "false"
-        auto_mode_lines.append(
-            textwrap.dedent(
-                f"""\
-                if [[ -z "$MODE" ]] && {cond}; then
-                  MODE="{mode['name']}"
-                fi
-                """
-            ).rstrip()
-        )
+        field_names = [f["name"] for f in mode.get("fields", [])]
+        if not field_names:
+            continue
+        cond = " && ".join(f'[[ -n "${{{mode_var(n)}}}" ]]' for n in field_names)
+        auto_mode_lines += [
+            f'if [[ -z "$MODE" ]] && {cond}; then',
+            f'  MODE="{mode["name"]}"',
+            "fi",
+        ]
+
+    # mode case blocks
+    mode_case_lines: list[str] = []
+    for mode in modes:
+        field_names = [f["name"] for f in mode.get("fields", [])]
+        mode_case_lines.append(f'{mode["name"]})')
         if mode["transport"] == "json":
-            env_assign = " ".join(f'{mode_var(name)}="${{{mode_var(name)}}}"' for name in field_names)
+            env_assign = " ".join(f'{mode_var(n)}="${{{mode_var(n)}}}"' for n in field_names)
             keys_expr = json.dumps(field_names)
-            payload = textwrap.dedent(
-                f"""\
-                PAYLOAD=$({env_assign} python3 -c 'import json, os; keys = {keys_expr}; data = {{}}; [data.__setitem__(key, os.environ.get(key.upper().replace("-", "_").replace(".", "_")) or os.environ.get(key.upper().replace("-", "_"))) for key in keys if (os.environ.get(key.upper().replace("-", "_").replace(".", "_")) or os.environ.get(key.upper().replace("-", "_")))]; print(json.dumps(data))')
-                curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L "$ENDPOINT" "${{COMMON_HEADERS[@]}}" -H "Content-Type: application/json" -d "$PAYLOAD"
-                """
+            mode_case_lines.append(
+                f"  PAYLOAD=$({env_assign} python3 -c 'import json, os; keys = {keys_expr}; "
+                f"data = {{}}; [data.__setitem__(key, os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
+                f"or os.environ.get(key.upper().replace(\"-\", \"_\"))) for key in keys "
+                f"if (os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
+                f"or os.environ.get(key.upper().replace(\"-\", \"_\")))]; print(json.dumps(data))')"
+            )
+            mode_case_lines.append(
+                '  curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L'
+                ' "$ENDPOINT" ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"}'
+                ' -H "Content-Type: application/json" -d "$PAYLOAD"'
             )
         else:
-            form_lines = "\n".join(f'      -F "{name}=@${{{mode_var(name)}}}" \\' if field.get("file") else f'      -F "{name}=${{{mode_var(name)}}}" \\' for name, field in [(f["name"], f) for f in mode.get("fields", [])])
-            payload = textwrap.dedent(
-                f"""\
-                  curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L "$ENDPOINT" "${{COMMON_HEADERS[@]}}" \\
-                {form_lines}
-                      | cat
-                """
+            mode_case_lines.append(
+                '  curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L'
+                ' "$ENDPOINT" ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"} \\'
             )
-        mode_cases.append(
-            textwrap.dedent(
-                f"""\
-                {mode['name']})
-                {payload.rstrip()}
-                  ;;
-                """
-            )
-        )
+            for field in mode.get("fields", []):
+                vname = mode_var(field["name"])
+                if field.get("file"):
+                    mode_case_lines.append(f'    -F "{field["name"]}=@${{{vname}}}" \\')
+                else:
+                    mode_case_lines.append(f'    -F "{field["name"]}=${{{vname}}}" \\')
+            mode_case_lines.append("    | cat")
+        mode_case_lines.append("  ;;")
 
-    auto_mode_block = "\n".join(auto_mode_lines)
-
-    return textwrap.dedent(
-        f"""\
-        #!/usr/bin/env bash
-        {source_header}
-        set -euo pipefail
-
-        MODE=""
-        TOKEN="${{{token_env}:-{default_token}}}"
-        ENDPOINT_OVERRIDE=""
-        {field_setup}
-        {extra_setup.rstrip()}
-
-        for arg in "$@"; do
-          case "$arg" in
-            --mode=*) MODE="${{arg#--mode=}}" ;;
-            --token=*) TOKEN="${{arg#--token=}}" ;;
-            --endpoint=*) ENDPOINT_OVERRIDE="${{arg#--endpoint=}}" ;;
-        {textwrap.indent(extra_parse.rstrip(), '    ')}
-        {textwrap.indent(chr(10).join(parse_lines), '    ')}
-            -h|--help)
-              echo "Usage: $0 --mode=<mode> [--token=TOKEN] [--endpoint=URL]"
-              exit 0
-              ;;
-          esac
-        done
-
-        {auto_mode_block}
-
-        if [[ -z "$MODE" ]]; then
-          echo "Provide --mode or enough fields to infer one" >&2
-          exit 1
-        fi
-
-        {pre_call.rstrip()}
-
-        TOKEN="${{TOKEN#Bearer }}"
-        TOKEN="${{TOKEN#bearer }}"
-
-        ENDPOINT={endpoint_expression}
-        if [[ -n "$ENDPOINT_OVERRIDE" ]]; then
-          ENDPOINT="$ENDPOINT_OVERRIDE"
-        fi
-
-        COMMON_HEADERS=()
-        if [[ -n "$TOKEN" ]]; then
-          COMMON_HEADERS+=(-H "Authorization: Bearer $TOKEN")
-        fi
-
-        echo "Calling {slug}..." >&2
-
-        case "$MODE" in
-        {''.join(mode_cases).rstrip()}
-          *)
-            echo "Unsupported mode: $MODE" >&2
-            exit 1
-            ;;
-        esac
-        """
-    ).replace('"${COMMON_HEADERS[@]}"', '${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"}')
+    lines: list[str] = [
+        "#!/usr/bin/env bash",
+        source_header,
+        "set -euo pipefail",
+        "",
+        'MODE=""',
+        f'TOKEN="${{{token_env}:-{default_token}}}"',
+        'ENDPOINT_OVERRIDE=""',
+    ]
+    for name in unique_fields:
+        lines.append(f'{mode_var(name)}=""')
+    if extra_setup.strip():
+        lines.extend(extra_setup.strip().splitlines())
+    lines += [
+        "",
+        'for arg in "$@"; do',
+        '  case "$arg" in',
+        '    --mode=*) MODE="${arg#--mode=}" ;;',
+        '    --token=*) TOKEN="${arg#--token=}" ;;',
+        '    --endpoint=*) ENDPOINT_OVERRIDE="${arg#--endpoint=}" ;;',
+    ]
+    if extra_parse.strip():
+        for ln in extra_parse.strip().splitlines():
+            lines.append("    " + ln.strip())
+    for name in unique_fields:
+        flag = name.replace("_", "-")
+        lines.append(f'    --{flag}=*) {mode_var(name)}="${{arg#--{flag}=}}" ;;')
+    lines += [
+        '    -h|--help)',
+        '      echo "Usage: $0 --mode=<mode> [--token=TOKEN] [--endpoint=URL]"',
+        "      exit 0",
+        "      ;;",
+        "  esac",
+        "done",
+        "",
+    ]
+    if auto_mode_lines:
+        lines.extend(auto_mode_lines)
+        lines.append("")
+    lines += [
+        'if [[ -z "$MODE" ]]; then',
+        '  echo "Provide --mode or enough fields to infer one" >&2',
+        "  exit 1",
+        "fi",
+        "",
+    ]
+    if pre_call.strip():
+        lines.extend(pre_call.strip().splitlines())
+        lines.append("")
+    lines += [
+        'TOKEN="${TOKEN#Bearer }"',
+        'TOKEN="${TOKEN#bearer }"',
+        "",
+        f"ENDPOINT={endpoint_expression}",
+        'if [[ -n "$ENDPOINT_OVERRIDE" ]]; then',
+        '  ENDPOINT="$ENDPOINT_OVERRIDE"',
+        "fi",
+        "",
+        "COMMON_HEADERS=()",
+        'if [[ -n "$TOKEN" ]]; then',
+        '  COMMON_HEADERS+=(-H "Authorization: Bearer $TOKEN")',
+        "fi",
+        "",
+        f'echo "Calling {slug}..." >&2',
+        "",
+        'case "$MODE" in',
+    ]
+    lines.extend(mode_case_lines)
+    lines += [
+        '  *)',
+        '    echo "Unsupported mode: $MODE" >&2',
+        "    exit 1",
+        "    ;;",
+        "esac",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def render_start_local_service(spec: dict) -> str:

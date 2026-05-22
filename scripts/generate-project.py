@@ -301,10 +301,11 @@ bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {default_args}
 
 ## 本地服务说明
 
-本项目封装本地 HTTP 服务，支持：
+本项目通过 auto-domain 将本地 HTTP 服务暴露为公网能力。调用时必须提供：
 
-- `--base-url=http://127.0.0.1:PORT` 直接调用本地端口
-- `--port=PORT --domain-name=NAME --auto-domain-token=TOKEN` 先通过 auto-domain 暴露公网再调用
+- `--port=PORT` 本地服务监听的端口
+- `--domain-name=NAME` 分配的公网子域名（如 `myapp` → `myapp.chxyka.ccwu.cc`）
+- `--auto-domain-token=TOKEN` auto-domain 认证 token
 """
     elif spec["source_kind"] == "script_service":
         source_extra = f"""
@@ -415,45 +416,36 @@ def render_public_run(spec: dict) -> str:
 
 def render_local_port_run(spec: dict) -> str:
     path = spec.get("path", "")
-    setup = textwrap.dedent(
-        f"""\
-        BASE_URL="${{BASE_URL:-}}"
-        PORT_OVERRIDE=""
-        DOMAIN_NAME="{spec.get('auto_domain_name', spec['project_slug'])}"
-        AUTO_DOMAIN_TOKEN="${{AUTO_DOMAIN_TOKEN:-}}"
-        """
-    )
-    parse_extra = textwrap.dedent(
-        """\
-            --base-url=*) BASE_URL="${arg#--base-url=}" ;;
-            --port=*) PORT_OVERRIDE="${arg#--port=}" ;;
-            --domain-name=*) DOMAIN_NAME="${arg#--domain-name=}" ;;
-            --auto-domain-token=*) AUTO_DOMAIN_TOKEN="${arg#--auto-domain-token=}" ;;
-        """
-    )
-    pre_call = textwrap.dedent(
-        f"""\
-        if [[ -z "$BASE_URL" ]]; then
-          if [[ -z "$PORT_OVERRIDE" ]]; then
-            echo "Provide --base-url or --port" >&2
-            exit 1
-          fi
-          AUTO_DOMAIN_CMD=(bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port="$PORT_OVERRIDE" --name="$DOMAIN_NAME" --daemon)
-          if [[ -n "$AUTO_DOMAIN_TOKEN" ]]; then
-            AUTO_DOMAIN_CMD+=(--token="$AUTO_DOMAIN_TOKEN")
-          fi
-          AUTO_DOMAIN_OUTPUT="$("${{AUTO_DOMAIN_CMD[@]}}")"
-          echo "$AUTO_DOMAIN_OUTPUT"
-          BASE_URL="$(printf '%s\\n' "$AUTO_DOMAIN_OUTPUT" | sed -n 's/.*Public URL : //p' | tail -1)"
-          if [[ -z "$BASE_URL" ]]; then
-            echo "Failed to allocate public URL through auto-domain" >&2
-            exit 1
-          fi
-        fi
-
-        """
-    )
-    return render_http_run(spec, endpoint_expression=f'"${{BASE_URL}}{path}"', source_header="# local port source", extra_setup=setup, extra_parse=parse_extra, pre_call=pre_call)
+    domain_name = spec.get("auto_domain_name", spec["project_slug"])
+    setup = "\n".join([
+        f'PORT=""',
+        f'DOMAIN_NAME="{domain_name}"',
+        'AUTO_DOMAIN_TOKEN="${AUTO_DOMAIN_TOKEN:-}"',
+    ])
+    parse_extra = "\n".join([
+        '--port=*) PORT="${arg#--port=}" ;;',
+        '--domain-name=*) DOMAIN_NAME="${arg#--domain-name=}" ;;',
+        '--auto-domain-token=*) AUTO_DOMAIN_TOKEN="${arg#--auto-domain-token=}" ;;',
+    ])
+    pre_call = "\n".join([
+        'if [[ -z "$PORT" ]]; then',
+        '  echo "Provide --port=PORT (local service port to expose via auto-domain)" >&2',
+        '  exit 1',
+        'fi',
+        '',
+        'AUTO_DOMAIN_CMD=(bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port="$PORT" --name="$DOMAIN_NAME" --daemon)',
+        'if [[ -n "$AUTO_DOMAIN_TOKEN" ]]; then',
+        '  AUTO_DOMAIN_CMD+=(--token="$AUTO_DOMAIN_TOKEN")',
+        'fi',
+        'AUTO_DOMAIN_OUTPUT="$("${AUTO_DOMAIN_CMD[@]}")"',
+        'echo "$AUTO_DOMAIN_OUTPUT"',
+        'BASE_URL="$(printf \'%s\\n\' "$AUTO_DOMAIN_OUTPUT" | sed -n \'s/.*Public URL : //p\' | tail -1)"',
+        'if [[ -z "$BASE_URL" ]]; then',
+        '  echo "Failed to allocate public URL through auto-domain" >&2',
+        '  exit 1',
+        'fi',
+    ])
+    return render_http_run(spec, endpoint_expression='"${BASE_URL}' + path + '"', source_header="# local port source", extra_setup=setup, extra_parse=parse_extra, pre_call=pre_call)
 
 
 def render_script_service_run(spec: dict) -> str:

@@ -89,10 +89,11 @@
 
 示例 spec：[examples/local-echo/local-port-spec.json](examples/local-echo/local-port-spec.json)
 
-生成的 `run.sh` 支持：
+生成的 `run.sh` 通过 auto-domain 将本地服务暴露为公网能力，必须提供：
 
-- `--base-url=http://127.0.0.1:PORT` 直接调用本地服务
-- `--port=PORT` + `--domain-name=NAME` + `--auto-domain-token=TOKEN` 先通过 auto-domain 暴露公网再调用
+- `--port=PORT` 本地服务监听的端口
+- `--domain-name=NAME` 分配的公网子域名
+- `--auto-domain-token=TOKEN` auto-domain 认证 token
 
 ---
 

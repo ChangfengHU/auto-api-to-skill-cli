@@ -52,7 +52,7 @@ def render_upload_file() -> str:
         OBJECT_PATH=""
         DOMAIN="${UPLOAD_R2_DOMAIN:-https://skill.vyibc.com}"
         API_URL="${UPLOAD_R2_URL:-https://upload-r2.vyibc.com}"
-        API_TOKEN="${UPLOAD_R2_TOKEN:-123456}"
+        API_TOKEN="${UPLOAD_R2_TOKEN:-yt-research-token-2026}"
 
         while [[ $# -gt 0 ]]; do
           case "$1" in
@@ -204,160 +204,197 @@ echo "SKILL_INSTALL_COMMAND=bash <(curl -fsSL 'https://skill.vyibc.com/install-$
 
 def render_skill_md(spec: dict) -> str:
     slug = spec["project_slug"]
-    description = spec["summary"]
+    summary = spec["summary"]
+    trigger_phrases = spec.get("trigger_phrases", [slug, f"调用 {slug}", f"使用 {slug}"])
+    trigger_str = "、".join(f'"{p}"' for p in trigger_phrases)
+    skill_description = spec.get("skill_description", f"当用户说{trigger_str} 时自动触发。{summary}")
     cli_example = spec.get("cli_example", f"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)")
-    cli_block = ""
+    default_args = spec.get("default_cli_args", "").strip()
+
+    modes = spec.get("request_modes", [])
+    param_rows = ""
+    for mode in modes:
+        for field in mode.get("fields", []):
+            param_rows += f"| `--{field['name'].replace('_', '-')}` | 否 | {mode.get('description', '').strip()} |\n"
+    params_section = ""
+    if param_rows:
+        params_section = f"""\
+## 参数
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--mode` | 是 | 调用模式，可选值：{', '.join('`' + m['name'] + '`' for m in modes)} |
+{param_rows}
+"""
+
+    cli_section = ""
     if spec.get("generate_cli", True):
-        cli_block = textwrap.dedent(
-            f"""\
-            ## 直接执行
+        cli_section = f"""\
+## 直接执行
 
-            ```bash
-            {cli_example}
-            ```
-            """
-        )
-    return textwrap.dedent(
-        f"""\
-        ---
-        name: {slug}
-        description: "{description}"
-        ---
+```bash
+{cli_example}
+```
 
-        # {spec.get("display_name", slug_to_title(slug))}
+"""
 
-        ## 作用
+    return f"""\
+---
+name: {slug}
+description: "{skill_description}"
+---
 
-        当用户希望把 `{slug}` 作为一个真正的 skill 安装到 agent 环境里，并通过统一参数调用它时，使用这个 skill。
+# {spec.get("display_name", slug_to_title(slug))}
 
-        ## 安装
+## 作用
 
-        ```bash
-        bash <(curl -fsSL 'https://skill.vyibc.com/install-{slug}.sh?ts=...')
-        ```
+{summary}
 
-        ## 核心执行入口
+## 执行
 
-        ```text
-        skills/{slug}/scripts/run.sh
-        ```
+```bash
+~/.claude/skills/{slug}/scripts/run.sh {default_args}
+```
 
-        安装后的 skill 和对外发布的 CLI 都来自这一个脚本。
-        
-        {cli_block.rstrip()}
-        """
-    )
+{params_section}{cli_section}"""
 
 
 def render_readme(spec: dict) -> str:
     slug = spec["project_slug"]
     generate_cli = spec.get("generate_cli", True)
-    mode_lines = "\n".join(
-        f"- `{mode['name']}`: {mode.get('description', '').strip()}" for mode in spec["request_modes"]
+    summary = spec["summary"]
+    default_args = spec.get("default_cli_args", "").strip()
+    trigger_phrases = spec.get("trigger_phrases", [slug, f"调用 {slug}", f"使用 {slug}"])
+
+    mode_table = "| 模式 | 说明 |\n|------|------|\n"
+    mode_table += "\n".join(
+        f"| `{mode['name']}` | {mode.get('description', '').strip()} |"
+        for mode in spec["request_modes"]
     )
-    examples = []
+
+    examples_blocks = []
     for example in spec.get("examples", []):
-        examples.append(f"### {example['label']}\n\n```bash\n{example['command']}\n```")
-    examples_text = "\n\n".join(examples) if examples else "No examples provided yet."
-    extra = ""
-    if spec["source_kind"] == "local_port":
-        extra = textwrap.dedent(
-            f"""
-            ## Local Port Source
+        examples_blocks.append(f"### {example['label']}\n\n```bash\n{example['command']}\n```")
+    examples_text = "\n\n".join(examples_blocks) if examples_blocks else "暂无示例。"
 
-            This project targets a local HTTP service. It supports:
+    trigger_list = "\n".join(f"- `{p}`" for p in trigger_phrases)
 
-            - `--base-url=http://127.0.0.1:PORT`
-            - or `--port=PORT` to expose the service through `auto-domain` first
-            """
-        )
-    if spec["source_kind"] == "script_service":
-        extra = textwrap.dedent(
-            f"""
-            ## Script Source
-
-            This project wraps a local script-backed service. The generated repository includes:
-
-            - `scripts/start-local-service.sh`
-            - `skills/{slug}/scripts/run.sh`
-
-            The runtime can start the local service, call it directly, or expose it through `auto-domain`.
-            """
-        )
-
-    direct_cli_section = ""
+    cli_section = ""
     if generate_cli:
-        direct_cli_section = textwrap.dedent(
-            f"""\
-            ## 1. 直接执行 CLI
+        cli_section = f"""\
 
-            ```bash
-            bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {spec.get("default_cli_args", "").strip()}
-            ```
-            """
-        )
+---
 
-    return textwrap.dedent(
-        f"""\
-        # {slug}
+## 1. 直接执行 CLI
 
-        `{slug}` 用来封装 `{spec.get("endpoint", slug)}` 这个能力，对外提供两个主要入口：
+不需要安装 skill，一条命令直接调用：
 
-- 安装一个真正的 skill 到 agent 环境
-- 直接执行 CLI 调用这个 HTTP 接口
+```bash
+bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {default_args}
+```
+"""
 
-{spec["summary"]}
+    source_extra = ""
+    if spec["source_kind"] == "local_port":
+        source_extra = """
+---
 
-        {direct_cli_section.rstrip()}
+## 本地服务说明
 
-        ## 2. 安装 skill
+本项目封装本地 HTTP 服务，支持：
 
-        ```bash
-        bash <(curl -fsSL 'https://skill.vyibc.com/install-{slug}.sh?ts=...')
-        ```
+- `--base-url=http://127.0.0.1:PORT` 直接调用本地端口
+- `--port=PORT --domain-name=NAME --auto-domain-token=TOKEN` 先通过 auto-domain 暴露公网再调用
+"""
+    elif spec["source_kind"] == "script_service":
+        source_extra = f"""
+---
 
-        这个命令会把 `{slug}` 安装到目标 skill 目录，例如：
+## 本地脚本服务说明
 
-- `~/.codex/skills/{slug}`
-- `~/.claude/skills/{slug}`
-- `~/.cursor/skills/{slug}`
+本项目封装本地脚本服务，生成文件包含：
 
-安装完成后，skill 内会包含：
+- `scripts/start-local-service.sh` — 启动本地 HTTP bridge
+- `skills/{slug}/scripts/run.sh` — 统一调用入口
 
-- `SKILL.md`
-- `scripts/run.sh`
+默认自动启动本地服务后调用，也可用 `--base-url` 跳过启动，或加 `--public` 暴露公网。
+"""
+
+    struct_extra = ""
+    if spec["source_kind"] == "script_service":
+        struct_extra = "  start-local-service.sh      # 启动本地脚本服务\n  "
+
+    return f"""\
+# {slug}
+
+{summary}
+{cli_section}
+---
+
+## 2. 安装为 Claude Code Skill
+
+```bash
+bash <(curl -fsSL 'https://skill.vyibc.com/install-{slug}.sh')
+```
+
+安装后 skill 会写入：
+
+- `~/.claude/skills/{slug}/SKILL.md`
+- `~/.claude/skills/{slug}/scripts/run.sh`
+
+### 安装完成后如何使用
+
+对 Claude 说以下任意一句，skill 会自动触发：
+
+{trigger_list}
+
+---
 
 ## 3. 支持的调用模式
 
-        {mode_lines}
+{mode_table}
+{source_extra}
+---
 
-        {extra}
+## 4. 调用示例
 
-        ## 4. 调用示例
+{examples_text}
 
-        {examples_text}
+---
 
-        ## 5. 发布
+## 5. 发布
 
-        本地发布：
+本地发布（需在仓库目录下）：
 
-        ```bash
-        ./scripts/publish-skill.sh
-        ```
+```bash
+./scripts/publish-skill.sh
+```
 
-        从 GitHub `main` 远程发布：
+从 GitHub `main` 远程发布：
 
-        ```bash
-        bash <(curl -fsSL https://skill.vyibc.com/publish-{slug}.sh)
-        ```
+```bash
+bash <(curl -fsSL https://skill.vyibc.com/publish-{slug}.sh)
+```
 
-        ## 6. 核心执行入口
+---
 
-        ```text
-        skills/{slug}/scripts/run.sh
-        ```
-        """
-    )
+## 6. 仓库结构
+
+```text
+README.md
+scripts/
+  {slug}.sh                    # CLI 直接执行入口
+  {struct_extra}publish-{slug}.sh             # 远程一键发布
+  publish-skill.sh             # 本地发布
+  upload-file.sh               # R2 上传工具
+skills/
+  {slug}/
+    SKILL.md                   # Claude Code skill 定义
+    scripts/run.sh             # 唯一核心执行逻辑
+```
+
+`scripts/{slug}.sh` 和安装后的 `skills/{slug}/scripts/run.sh` 来自同一份脚本。
+"""
 
 
 def render_wrapper(slug: str) -> str:
@@ -590,7 +627,7 @@ def render_http_run(spec: dict, endpoint_expression: str, source_header: str, ex
             ;;
         esac
         """
-    )
+    ).replace('"${COMMON_HEADERS[@]}"', '${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"}')
 
 
 def render_start_local_service(spec: dict) -> str:

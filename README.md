@@ -32,6 +32,11 @@ Claude 会自动判断来源类型、构建 spec、生成项目并发布。
 CF Worker JS → wrangler 部署 → https://auto-api-{slug}.workers.dev → skill
 ```
 
+**对 Claude 说：**
+- "我有一段 JS 逻辑，不依赖本地环境，帮我部署成 Cloudflare Worker skill"
+- "帮我把这个轻量函数做成 CF Worker skill，逻辑是：[描述逻辑]"
+- "这个功能可以在纯 JS 环境跑，帮我封装成全球可用的 skill"
+
 示例 spec: [examples/case1-cloudflare-worker/spec.json](examples/case1-cloudflare-worker/spec.json)
 
 ---
@@ -43,6 +48,11 @@ CF Worker JS → wrangler 部署 → https://auto-api-{slug}.workers.dev → ski
 ```
 local-script.sh → Python HTTP bridge → auto-domain → 公网 URL → skill
 ```
+
+**对 Claude 说：**
+- "我有一个本地脚本，强依赖我机器上的环境，帮我封装成可以远程调用的 skill"
+- "这个脚本只能在我自己的机器上跑（用了本地 nvm/conda/私有文件），帮我做成 skill"
+- "帮我把 [脚本路径] 这个脚本封装成 skill，它依赖我本机的环境，没法部署到云端"
 
 示例 spec: [examples/case2-script-service/spec.json](examples/case2-script-service/spec.json)
 
@@ -56,6 +66,11 @@ local-script.sh → Python HTTP bridge → auto-domain → 公网 URL → skill
 本地 HTTP 服务 → auto-domain → 公网 URL → skill
 ```
 
+**对 Claude 说：**
+- "我本地有个 HTTP 服务跑在 PORT 端口，帮我封装成 skill"
+- "我有一个本地服务 localhost:PORT，帮我做成可以远程调用的 skill"
+- "帮我把本地运行的 [服务名] 服务（端口 PORT）发布成 skill"
+
 示例 spec: [examples/case3-local-port/spec.json](examples/case3-local-port/spec.json)
 
 ---
@@ -67,6 +82,11 @@ local-script.sh → Python HTTP bridge → auto-domain → 公网 URL → skill
 ```
 公网 HTTP 接口 → skill（直接 curl）
 ```
+
+**对 Claude 说：**
+- "帮我把这个公网 API 封装成 skill：https://xxx/api/..."
+- "我有一个已经部署好的接口 [URL]，帮我做成 skill"
+- "这个第三方 API 我想让 Claude 直接调用，帮我封装成 skill"
 
 示例 spec: [examples/case4-public-api/spec.json](examples/case4-public-api/spec.json)
 

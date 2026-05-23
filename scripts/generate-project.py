@@ -738,7 +738,7 @@ def worker_url(slug: str) -> str:
 def render_worker_js(spec: dict) -> str:
     code = spec.get("worker_code", "")
     if code:
-        return code if code.strip().startswith("export default") else f"export default {{\n  async fetch(request, env) {{\n    {code}\n  }}\n}};\n"
+        return code if "export default" in code else f"export default {{\n  async fetch(request, env) {{\n    {code}\n  }}\n}};\n"
     # default hello worker
     return """\
 export default {
@@ -756,9 +756,8 @@ def render_wrangler_toml(spec: dict) -> str:
     name = worker_name(slug)
     lines = [
         f'name = "{name}"',
-        'main = "src/worker.js"',
+        'main = "src/worker.mjs"',
         'compatibility_date = "2024-11-01"',
-        'compatibility_flags = ["nodejs_compat"]',
     ]
     return "\n".join(lines) + "\n"
 
@@ -789,7 +788,6 @@ def render_deploy_worker_sh(spec: dict) -> str:
         "  npm install --silent wrangler",
         "fi",
         "",
-        'WRANGLER="${{ command -v wrangler >/dev/null 2>&1 && echo wrangler || echo ./node_modules/.bin/wrangler }}"',
         'WRANGLER="$(command -v wrangler 2>/dev/null || echo ./node_modules/.bin/wrangler)"',
         "",
         'CLOUDFLARE_EMAIL="$CF_EMAIL" CLOUDFLARE_API_KEY="$CF_API_KEY" \\',
@@ -843,7 +841,7 @@ def render_generated_project(spec: dict, out_dir: pathlib.Path) -> None:
         write(out_dir / "scripts" / "local-script.sh", render_local_script(spec), executable=True)
     elif spec["source_kind"] == "cloudflare_worker":
         run_script = render_cloudflare_worker_run(spec)
-        write(out_dir / "worker" / "src" / "worker.js", render_worker_js(spec))
+        write(out_dir / "worker" / "src" / "worker.mjs", render_worker_js(spec))
         write(out_dir / "worker" / "wrangler.toml", render_wrangler_toml(spec))
         write(out_dir / "scripts" / "deploy-worker.sh", render_deploy_worker_sh(spec), executable=True)
     else:

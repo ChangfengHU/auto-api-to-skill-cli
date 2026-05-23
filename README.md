@@ -4,6 +4,25 @@
 
 ---
 
+## 初始化配置
+
+首次使用前，将密钥写入 `~/.agent-brain-plugins.env`（参考 [.env.example](.env.example)）：
+
+```bash
+cp .env.example ~/.agent-brain-plugins.env
+# 编辑文件，填入你自己的 GitHub Token、Cloudflare 密钥
+```
+
+| 变量 | 用途 |
+|---|---|
+| `CHANGFENG_TOKEN` | GitHub Token（推送仓库用） |
+| `CF_EMAIL_SKILL` | Cloudflare 邮箱 |
+| `CF_API_KEY_SKILL` | Cloudflare Global API Key |
+| `CF_ACCOUNT_ID_SKILL` | Cloudflare Account ID |
+| `CF_WORKERS_SUBDOMAIN` | workers.dev 子域名（CF 控制台可查） |
+
+---
+
 ## 安装 Skill
 
 ```bash

@@ -722,7 +722,9 @@ def render_start_local_service(spec: dict) -> str:
 
 
 CF_WORKER_PREFIX = "auto-api-"
-CF_WORKERS_SUBDOMAIN = "hb67egcim4"
+# Read from env so different CF accounts work correctly.
+# Set CF_WORKERS_SUBDOMAIN in ~/.agent-brain-plugins.env (see .env.example).
+CF_WORKERS_SUBDOMAIN = os.environ.get("CF_WORKERS_SUBDOMAIN", "hb67egcim4")
 
 
 def worker_name(slug: str) -> str:

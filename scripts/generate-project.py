@@ -294,18 +294,27 @@ bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {default_args}
 ```
 """
 
+    domain_name = spec.get("domain_name", spec.get("auto_domain_name", spec["project_slug"]))
     source_extra = ""
     if spec["source_kind"] == "local_port":
-        source_extra = """
+        source_extra = f"""
 ---
 
 ## 本地服务说明
 
-本项目通过 auto-domain 将本地 HTTP 服务暴露为公网能力。调用时必须提供：
+本 skill 通过 auto-domain 隧道调用本地服务，公网地址固定为：
 
-- `--port=PORT` 本地服务监听的端口
-- `--domain-name=NAME` 分配的公网子域名（如 `myapp` → `myapp.chxyka.ccwu.cc`）
-- `--auto-domain-token=TOKEN` auto-domain 认证 token
+```
+https://{domain_name}.chxyka.ccwu.cc
+```
+
+调用前请先在本地启动服务，并运行 auto-domain 将端口打洞到公网：
+
+```bash
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name={domain_name} --daemon
+```
+
+Skill 本身不需要任何 `--port` 或 `--domain-name` 参数，直接 `--mode=...` 调用即可。
 """
     elif spec["source_kind"] == "script_service":
         source_extra = f"""
@@ -313,12 +322,27 @@ bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {default_args}
 
 ## 本地脚本服务说明
 
-本项目封装本地脚本服务，生成文件包含：
+本 skill 将本地 shell 脚本包装成 HTTP 服务，再通过 auto-domain 暴露到公网。
 
-- `scripts/start-local-service.sh` — 启动本地 HTTP bridge
-- `skills/{slug}/scripts/run.sh` — 统一调用入口
+**在服务所在机器上，按顺序执行：**
 
-默认自动启动本地服务后调用，也可用 `--base-url` 跳过启动，或加 `--public` 暴露公网。
+```bash
+# 1. 启动本地 HTTP bridge（包装 scripts/local-script.sh）
+./scripts/start-local-service.sh --port={spec.get('local_port', 18789)} --daemon
+
+# 2. 用 auto-domain 打洞到公网
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port={spec.get('local_port', 18789)} --name={domain_name} --daemon
+```
+
+之后在任何地方执行 skill，都会调用到这台机器上的本地脚本：
+
+```bash
+bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) --mode=...
+```
+
+- `scripts/local-script.sh` — 本地重量级脚本，编辑此文件实现业务逻辑
+- `scripts/bridge.py` — Python HTTP bridge，无需修改
+- `scripts/start-local-service.sh` — bridge 启动脚本
 """
 
     struct_extra = ""
@@ -419,93 +443,24 @@ DEFAULT_AUTO_DOMAIN_TOKEN = "atd-76631b52126234666e0a12c6f45ac6d8"
 
 def render_local_port_run(spec: dict) -> str:
     path = spec.get("path", "")
-    domain_name = spec.get("auto_domain_name", spec["project_slug"])
-    default_token = spec.get("auto_domain_token", DEFAULT_AUTO_DOMAIN_TOKEN)
-    setup = "\n".join([
-        f'PORT=""',
-        f'DOMAIN_NAME="{domain_name}"',
-        f'AUTO_DOMAIN_TOKEN="${{AUTO_DOMAIN_TOKEN:-{default_token}}}"',
-    ])
-    parse_extra = "\n".join([
-        '--port=*) PORT="${arg#--port=}" ;;',
-        '--domain-name=*) DOMAIN_NAME="${arg#--domain-name=}" ;;',
-        '--auto-domain-token=*) AUTO_DOMAIN_TOKEN="${arg#--auto-domain-token=}" ;;',
-    ])
-    pre_call = "\n".join([
-        'if [[ -z "$PORT" ]]; then',
-        '  echo "Provide --port=PORT (local service port to expose via auto-domain)" >&2',
-        '  exit 1',
-        'fi',
-        '',
-        '_AUTODOMAIN_TMP=$(mktemp)',
-        'curl -fsSL https://skill.vyibc.com/auto-domain.sh -o "$_AUTODOMAIN_TMP"',
-        '_AUTODOMAIN_ARGS=(--port="$PORT" --name="$DOMAIN_NAME" --daemon)',
-        'if [[ -n "$AUTO_DOMAIN_TOKEN" ]]; then',
-        '  _AUTODOMAIN_ARGS+=(--token="$AUTO_DOMAIN_TOKEN")',
-        'fi',
-        'AUTO_DOMAIN_OUTPUT="$(bash "$_AUTODOMAIN_TMP" "${_AUTODOMAIN_ARGS[@]}")"',
-        'rm -f "$_AUTODOMAIN_TMP"',
-        'echo "$AUTO_DOMAIN_OUTPUT"',
-        'BASE_URL="$(printf \'%s\\n\' "$AUTO_DOMAIN_OUTPUT" | sed -n \'s/.*Public URL : //p\' | tail -1)"',
-        'if [[ -z "$BASE_URL" ]]; then',
-        '  echo "Failed to allocate public URL through auto-domain" >&2',
-        '  exit 1',
-        'fi',
-    ])
-    return render_http_run(spec, endpoint_expression='"${BASE_URL}' + path + '"', source_header="# local port source", extra_setup=setup, extra_parse=parse_extra, pre_call=pre_call)
+    domain_name = spec.get("domain_name", spec.get("auto_domain_name", spec["project_slug"]))
+    endpoint = f"https://{domain_name}.chxyka.ccwu.cc{path}"
+    return render_http_run(spec, endpoint_expression=shell_quote(endpoint), source_header="# local port source (auto-domain tunnel)")
 
 
 def render_script_service_run(spec: dict) -> str:
     path = spec.get("path", "")
-    local_port = str(spec.get("local_port", 18789))
-    setup = textwrap.dedent(
-        f"""\
-        BASE_URL="${{BASE_URL:-}}"
-        START_LOCAL=1
-        LOCAL_PORT="{local_port}"
-        PUBLIC=0
-        DOMAIN_NAME="{spec.get('auto_domain_name', spec['project_slug'])}"
-        AUTO_DOMAIN_TOKEN="${{AUTO_DOMAIN_TOKEN:-{spec.get('auto_domain_token', DEFAULT_AUTO_DOMAIN_TOKEN)}}}"
-        SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
-        ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-        """
+    domain_name = spec.get("domain_name", spec.get("auto_domain_name", spec["project_slug"]))
+    endpoint = f"https://{domain_name}.chxyka.ccwu.cc{path}"
+    return render_http_run(
+        spec,
+        endpoint_expression=shell_quote(endpoint),
+        source_header="# script service source (auto-domain tunnel)",
+        include_mode=True,
     )
-    parse_extra = textwrap.dedent(
-        """\
-            --base-url=*) BASE_URL="${arg#--base-url=}" ;;
-            --local-port=*) LOCAL_PORT="${arg#--local-port=}" ;;
-            --public) PUBLIC=1 ;;
-            --domain-name=*) DOMAIN_NAME="${arg#--domain-name=}" ;;
-            --auto-domain-token=*) AUTO_DOMAIN_TOKEN="${arg#--auto-domain-token=}" ;;
-        """
-    )
-    pre_call = textwrap.dedent(
-        f"""\
-        if [[ -z "$BASE_URL" ]]; then
-          "$ROOT_DIR/scripts/start-local-service.sh" --port="$LOCAL_PORT" --daemon >/dev/null
-          sleep 1
-          BASE_URL="http://127.0.0.1:${{LOCAL_PORT}}"
-        fi
-
-        if [[ "$PUBLIC" == "1" ]]; then
-          AUTO_DOMAIN_CMD=(bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port="$LOCAL_PORT" --name="$DOMAIN_NAME" --daemon)
-          if [[ -n "$AUTO_DOMAIN_TOKEN" ]]; then
-            AUTO_DOMAIN_CMD+=(--token="$AUTO_DOMAIN_TOKEN")
-          fi
-          AUTO_DOMAIN_OUTPUT="$("${{AUTO_DOMAIN_CMD[@]}}")"
-          echo "$AUTO_DOMAIN_OUTPUT"
-          PUBLIC_URL="$(printf '%s\\n' "$AUTO_DOMAIN_OUTPUT" | sed -n 's/.*Public URL : //p' | tail -1)"
-          if [[ -n "$PUBLIC_URL" ]]; then
-            BASE_URL="$PUBLIC_URL"
-          fi
-        fi
-
-        """
-    )
-    return render_http_run(spec, endpoint_expression=f'"${{BASE_URL}}{path}"', source_header="# script service source", extra_setup=setup, extra_parse=parse_extra, pre_call=pre_call)
 
 
-def render_http_run(spec: dict, endpoint_expression: str, source_header: str, extra_setup: str = "", extra_parse: str = "", pre_call: str = "") -> str:
+def render_http_run(spec: dict, endpoint_expression: str, source_header: str, extra_setup: str = "", extra_parse: str = "", pre_call: str = "", include_mode: bool = False) -> str:
     slug = spec["project_slug"]
     auth = spec.get("auth", {})
     token_env = auth.get("token_env", f"{mode_var(slug)}_TOKEN")
@@ -539,9 +494,10 @@ def render_http_run(spec: dict, endpoint_expression: str, source_header: str, ex
         if mode["transport"] == "json":
             env_assign = " ".join(f'{mode_var(n)}="${{{mode_var(n)}}}"' for n in field_names)
             keys_expr = json.dumps(field_names)
+            data_init = f'{{"mode": "{mode["name"]}"}}' if include_mode else '{}'
             mode_case_lines.append(
                 f"  PAYLOAD=$({env_assign} python3 -c 'import json, os; keys = {keys_expr}; "
-                f"data = {{}}; [data.__setitem__(key, os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
+                f"data = {data_init}; [data.__setitem__(key, os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
                 f"or os.environ.get(key.upper().replace(\"-\", \"_\"))) for key in keys "
                 f"if (os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
                 f"or os.environ.get(key.upper().replace(\"-\", \"_\")))]; print(json.dumps(data))')"
@@ -643,42 +599,209 @@ def render_http_run(spec: dict, endpoint_expression: str, source_header: str, ex
     return "\n".join(lines) + "\n"
 
 
+def render_bridge_py() -> str:
+    return """\
+import http.server
+import json
+import os
+import subprocess
+
+PORT = int(os.environ.get('BRIDGE_PORT', '18789'))
+SCRIPT = os.environ.get('BRIDGE_SCRIPT', '')
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'ok')
+
+    def do_POST(self):
+        length = int(self.headers.get('Content-Length', 0))
+        try:
+            data = json.loads(self.rfile.read(length)) if length else {}
+        except Exception:
+            data = {}
+
+        env = {**os.environ}
+        for k, v in data.items():
+            env[k.upper().replace('-', '_').replace('.', '_')] = str(v)
+
+        r = subprocess.run(
+            ['bash', '-l', SCRIPT],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+        out = r.stdout.encode()
+        self.send_response(200 if r.returncode == 0 else 500)
+        self.send_header('Content-Type', 'text/plain; charset=utf-8')
+        self.send_header('Content-Length', str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
+    def log_message(self, *_):
+        pass
+
+
+print(f'[bridge] 127.0.0.1:{PORT}', flush=True)
+http.server.HTTPServer(('127.0.0.1', PORT), Handler).serve_forever()
+"""
+
+
+def render_local_script(spec: dict) -> str:
+    shell = spec.get("bootstrap", {}).get("shell", 'echo "no script configured"')
+    return f"#!/usr/bin/env bash\n# Local heavy script — edit this file to implement your logic\n{shell}\n"
+
+
 def render_start_local_service(spec: dict) -> str:
-    bootstrap = spec.get("bootstrap", {})
-    shell = bootstrap.get("shell", "")
-    return textwrap.dedent(
-        f"""\
-        #!/usr/bin/env bash
-        set -euo pipefail
+    slug = spec["project_slug"]
+    local_port = str(spec.get("local_port", 18789))
+    lines = [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "",
+        f'PORT="{local_port}"',
+        'DAEMON=0',
+        f'PID_FILE="$HOME/.{slug}-bridge.pid"',
+        f'LOG_FILE="$HOME/.{slug}-bridge.log"',
+        'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+        "",
+        "while [[ $# -gt 0 ]]; do",
+        '  case "$1" in',
+        '    --port=*) PORT="${1#--port=}"; shift ;;',
+        "    --daemon) DAEMON=1; shift ;;",
+        "    --stop)",
+        f'      if [[ -f "$HOME/.{slug}-bridge.pid" ]] && kill -0 "$(cat "$HOME/.{slug}-bridge.pid")" 2>/dev/null; then',
+        f'        kill "$(cat "$HOME/.{slug}-bridge.pid")"; rm -f "$HOME/.{slug}-bridge.pid"',
+        '        echo "Bridge stopped."',
+        "      else",
+        '        echo "No bridge running."',
+        "      fi",
+        "      exit 0",
+        "      ;;",
+        '    *) echo "unknown: $1" >&2; exit 1 ;;',
+        "  esac",
+        "done",
+        "",
+        'BRIDGE_PY="$SCRIPT_DIR/bridge.py"',
+        'LOCAL_SCRIPT="$SCRIPT_DIR/local-script.sh"',
+        "",
+        'if [[ ! -f "$BRIDGE_PY" ]]; then',
+        '  echo "bridge.py not found at $BRIDGE_PY" >&2; exit 1',
+        "fi",
+        'if [[ ! -f "$LOCAL_SCRIPT" ]]; then',
+        '  echo "local-script.sh not found at $LOCAL_SCRIPT" >&2; exit 1',
+        "fi",
+        "",
+        "export BRIDGE_PORT BRIDGE_SCRIPT BRIDGE_PY_FILE",
+        'BRIDGE_PORT="$PORT"',
+        'BRIDGE_SCRIPT="$LOCAL_SCRIPT"',
+        'BRIDGE_PY_FILE="$BRIDGE_PY"',
+        "",
+        'if [[ "$DAEMON" == "1" ]]; then',
+        '  > "$LOG_FILE"',
+        "  nohup bash -lc 'python3 \"$BRIDGE_PY_FILE\"' >> \"$LOG_FILE\" 2>&1 &",
+        '  echo $! > "$PID_FILE"',
+        '  echo "Bridge started on port $PORT (PID: $(cat "$PID_FILE"))"',
+        '  echo "  Logs : tail -f $LOG_FILE"',
+        "  for i in $(seq 1 20); do",
+        '    if curl -sf -X GET "http://127.0.0.1:$PORT" -o /dev/null 2>&1; then',
+        '      echo "  Ready: http://127.0.0.1:$PORT"',
+        "      break",
+        "    fi",
+        "    sleep 0.5",
+        "  done",
+        "else",
+        "  exec bash -lc 'python3 \"$BRIDGE_PY_FILE\"'",
+        "fi",
+    ]
+    return "\n".join(lines) + "\n"
 
-        PORT="{spec.get('local_port', 18789)}"
-        DAEMON=0
-        PID_FILE="${{HOME}}/.{spec['project_slug']}.pid"
-        LOG_FILE="${{HOME}}/.{spec['project_slug']}.log"
 
-        while [[ $# -gt 0 ]]; do
-          case "$1" in
-            --port=*) PORT="${{1#--port=}}" ; shift ;;
-            --daemon) DAEMON=1 ; shift ;;
-            *) echo "unknown argument: $1" >&2 ; exit 1 ;;
-          esac
-        done
+CF_WORKER_PREFIX = "auto-api-"
+CF_WORKERS_SUBDOMAIN = "hb67egcim4"
 
-      start_service() {{
-        export PORT
-        {textwrap.indent(shell.rstrip(), '  ')}
-      }}
 
-        if [[ "$DAEMON" == "1" ]]; then
-          nohup bash -lc "$(declare -f start_service); start_service" >>"$LOG_FILE" 2>&1 &
-          echo "$!" > "$PID_FILE"
-          echo "Started local service (PID: $(cat "$PID_FILE"))"
-          exit 0
-        fi
+def worker_name(slug: str) -> str:
+    return f"{CF_WORKER_PREFIX}{slug}"
 
-        start_service
-        """
-    )
+
+def worker_url(slug: str) -> str:
+    return f"https://{worker_name(slug)}.{CF_WORKERS_SUBDOMAIN}.workers.dev"
+
+
+def render_worker_js(spec: dict) -> str:
+    code = spec.get("worker_code", "")
+    if code:
+        return code if code.strip().startswith("export default") else f"export default {{\n  async fetch(request, env) {{\n    {code}\n  }}\n}};\n"
+    # default hello worker
+    return """\
+export default {
+  async fetch(request, env) {
+    let body = {};
+    try { body = await request.json(); } catch (_) {}
+    return Response.json({ ok: true, received: body });
+  },
+};
+"""
+
+
+def render_wrangler_toml(spec: dict) -> str:
+    slug = spec["project_slug"]
+    name = worker_name(slug)
+    lines = [
+        f'name = "{name}"',
+        'main = "src/worker.js"',
+        'compatibility_date = "2024-11-01"',
+        'compatibility_flags = ["nodejs_compat"]',
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def render_deploy_worker_sh(spec: dict) -> str:
+    slug = spec["project_slug"]
+    name = worker_name(slug)
+    url = worker_url(slug)
+    lines = [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "",
+        'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+        'WORKER_DIR="$(cd "$SCRIPT_DIR/../worker" && pwd)"',
+        "",
+        f'CF_EMAIL="${{CF_EMAIL_SKILL:-{spec.get("cf_email", "go20260310@outlook.com")}}}"',
+        f'CF_API_KEY="${{CF_API_KEY_SKILL:-}}"',
+        "",
+        'if [[ -z "$CF_API_KEY" ]]; then',
+        '  echo "CF_API_KEY_SKILL env var required" >&2; exit 1',
+        "fi",
+        "",
+        "echo \"Deploying CF Worker: " + name + "...\"",
+        'cd "$WORKER_DIR"',
+        "",
+        "# install wrangler if needed",
+        'if ! command -v wrangler >/dev/null 2>&1 && [[ ! -f node_modules/.bin/wrangler ]]; then',
+        "  npm install --silent wrangler",
+        "fi",
+        "",
+        'WRANGLER="${{ command -v wrangler >/dev/null 2>&1 && echo wrangler || echo ./node_modules/.bin/wrangler }}"',
+        'WRANGLER="$(command -v wrangler 2>/dev/null || echo ./node_modules/.bin/wrangler)"',
+        "",
+        'CLOUDFLARE_EMAIL="$CF_EMAIL" CLOUDFLARE_API_KEY="$CF_API_KEY" \\',
+        '  "$WRANGLER" deploy --config wrangler.toml 2>&1',
+        "",
+        "echo \"\"",
+        f'echo "Worker deployed: {url}"',
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def render_cloudflare_worker_run(spec: dict) -> str:
+    url = worker_url(spec["project_slug"])
+    return render_http_run(spec, endpoint_expression=shell_quote(url), source_header="# cloudflare worker source")
 
 
 def render_gitignore() -> str:
@@ -686,6 +809,8 @@ def render_gitignore() -> str:
         """\
         .DS_Store
         node_modules/
+        worker/node_modules/
+        .wrangler/
         .auto-domain/
         *.log
         *.pid
@@ -712,6 +837,13 @@ def render_generated_project(spec: dict, out_dir: pathlib.Path) -> None:
     elif spec["source_kind"] == "script_service":
         run_script = render_script_service_run(spec)
         write(out_dir / "scripts" / "start-local-service.sh", render_start_local_service(spec), executable=True)
+        write(out_dir / "scripts" / "bridge.py", render_bridge_py())
+        write(out_dir / "scripts" / "local-script.sh", render_local_script(spec), executable=True)
+    elif spec["source_kind"] == "cloudflare_worker":
+        run_script = render_cloudflare_worker_run(spec)
+        write(out_dir / "worker" / "src" / "worker.js", render_worker_js(spec))
+        write(out_dir / "worker" / "wrangler.toml", render_wrangler_toml(spec))
+        write(out_dir / "scripts" / "deploy-worker.sh", render_deploy_worker_sh(spec), executable=True)
     else:
         raise SystemExit(f"unsupported source_kind: {spec['source_kind']}")
 

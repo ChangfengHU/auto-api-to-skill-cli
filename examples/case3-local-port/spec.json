@@ -1,0 +1,23 @@
+{
+  "project_slug": "my-local-service",
+  "repo_name": "auto-my-local-service",
+  "source_kind": "local_port",
+  "domain_name": "my-local-service",
+  "path": "/",
+  "summary": "本地 HTTP 服务通过 auto-domain 暴露为公网 API",
+  "request_modes": [
+    {
+      "name": "call",
+      "transport": "json",
+      "description": "调用本地服务",
+      "fields": []
+    }
+  ],
+  "trigger_phrases": ["my-local-service", "调用本地服务"],
+  "examples": [
+    {
+      "label": "调用服务",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/my-local-service.sh) --mode=call"
+    }
+  ]
+}

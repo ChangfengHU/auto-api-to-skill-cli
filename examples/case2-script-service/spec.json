@@ -1,0 +1,26 @@
+{
+  "project_slug": "my-local-script",
+  "repo_name": "auto-my-local-script",
+  "source_kind": "script_service",
+  "domain_name": "my-local-script",
+  "local_port": 18099,
+  "summary": "重量级本地脚本通过 HTTP bridge + auto-domain 暴露为公网 API",
+  "bootstrap": {
+    "shell": "echo \"Hello from $(hostname)! MODE=${MODE:-default}\"\necho \"Python: $(python3 --version 2>&1)\""
+  },
+  "request_modes": [
+    {
+      "name": "run",
+      "transport": "json",
+      "description": "执行本地脚本",
+      "fields": []
+    }
+  ],
+  "trigger_phrases": ["my-local-script", "调用本地脚本"],
+  "examples": [
+    {
+      "label": "执行脚本",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/my-local-script.sh) --mode=run"
+    }
+  ]
+}

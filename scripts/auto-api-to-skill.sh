@@ -2,4 +2,4 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-exec python3 "$ROOT_DIR/scripts/generate-project.py" "$@"
+exec "$ROOT_DIR/skills/auto-api-to-skill/scripts/run.sh" "$@"

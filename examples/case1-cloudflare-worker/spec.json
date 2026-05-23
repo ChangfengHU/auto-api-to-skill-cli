@@ -1,0 +1,24 @@
+{
+  "project_slug": "my-cf-skill",
+  "repo_name": "auto-my-cf-skill",
+  "source_kind": "cloudflare_worker",
+  "summary": "轻量逻辑部署到 Cloudflare Worker，全球可访问",
+  "worker_code": "export default {\n  async fetch(request, env) {\n    let body = {};\n    try { body = await request.json(); } catch (_) {}\n    const name = body.name || 'World';\n    return Response.json({ message: `Hello, ${name}! From CF Worker` });\n  },\n};\n",
+  "request_modes": [
+    {
+      "name": "greet",
+      "transport": "json",
+      "description": "问候接口",
+      "fields": [
+        {"name": "name", "description": "被问候的名字"}
+      ]
+    }
+  ],
+  "trigger_phrases": ["my-cf-skill", "调用 my-cf-skill"],
+  "examples": [
+    {
+      "label": "默认问候",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/my-cf-skill.sh) --mode=greet"
+    }
+  ]
+}

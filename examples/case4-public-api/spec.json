@@ -1,0 +1,28 @@
+{
+  "project_slug": "my-public-api",
+  "repo_name": "auto-my-public-api",
+  "source_kind": "public_api",
+  "endpoint": "https://api.example.com/v1/run",
+  "summary": "已有公网 API 直接包装成 skill",
+  "auth": {
+    "token_env": "MY_PUBLIC_API_TOKEN",
+    "default_token": ""
+  },
+  "request_modes": [
+    {
+      "name": "run",
+      "transport": "json",
+      "description": "调用接口",
+      "fields": [
+        {"name": "input", "description": "输入内容"}
+      ]
+    }
+  ],
+  "trigger_phrases": ["my-public-api", "调用公网接口"],
+  "examples": [
+    {
+      "label": "调用接口",
+      "command": "bash <(curl -fsSL https://skill.vyibc.com/my-public-api.sh) --mode=run --input=hello"
+    }
+  ]
+}

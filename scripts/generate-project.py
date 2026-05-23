@@ -414,10 +414,13 @@ def render_public_run(spec: dict) -> str:
     return render_http_run(spec, endpoint_expression=shell_quote(spec["endpoint"]), source_header="# public API source")
 
 
+DEFAULT_AUTO_DOMAIN_TOKEN = "atd-76631b52126234666e0a12c6f45ac6d8"
+
+
 def render_local_port_run(spec: dict) -> str:
     path = spec.get("path", "")
     domain_name = spec.get("auto_domain_name", spec["project_slug"])
-    default_token = spec.get("auto_domain_token", "")
+    default_token = spec.get("auto_domain_token", DEFAULT_AUTO_DOMAIN_TOKEN)
     setup = "\n".join([
         f'PORT=""',
         f'DOMAIN_NAME="{domain_name}"',
@@ -462,7 +465,7 @@ def render_script_service_run(spec: dict) -> str:
         LOCAL_PORT="{local_port}"
         PUBLIC=0
         DOMAIN_NAME="{spec.get('auto_domain_name', spec['project_slug'])}"
-        AUTO_DOMAIN_TOKEN="${{AUTO_DOMAIN_TOKEN:-{spec.get('auto_domain_token', '')}}}"
+        AUTO_DOMAIN_TOKEN="${{AUTO_DOMAIN_TOKEN:-{spec.get('auto_domain_token', DEFAULT_AUTO_DOMAIN_TOKEN)}}}"
         SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
         ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
         """

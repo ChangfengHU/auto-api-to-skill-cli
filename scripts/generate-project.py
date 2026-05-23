@@ -208,8 +208,6 @@ def render_skill_md(spec: dict) -> str:
     trigger_phrases = spec.get("trigger_phrases", [slug, f"调用 {slug}", f"使用 {slug}"])
     trigger_str = "、".join(f'"{p}"' for p in trigger_phrases)
     skill_description = spec.get("skill_description", f"当用户说{trigger_str} 时自动触发。{summary}")
-    cli_example = spec.get("cli_example", f"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)")
-    default_args = spec.get("default_cli_args", "").strip()
 
     modes = spec.get("request_modes", [])
     param_rows = ""
@@ -227,13 +225,23 @@ def render_skill_md(spec: dict) -> str:
 {param_rows}
 """
 
+    # 执行示例参数：优先 default_cli_args，否则自动生成
+    run_args = spec.get("default_cli_args", "").strip() or _cli_usage_args(spec)
+
+    # CLI 示例：优先 spec 第一条 example，否则自动生成
+    cli_examples = spec.get("examples", [])
+    if cli_examples:
+        cli_cmd = cli_examples[0]["command"]
+    else:
+        cli_cmd = f"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {run_args}".rstrip()
+
     cli_section = ""
     if spec.get("generate_cli", True):
         cli_section = f"""\
 ## 直接执行
 
 ```bash
-{cli_example}
+{cli_cmd}
 ```
 
 """
@@ -253,17 +261,29 @@ description: "{skill_description}"
 ## 执行
 
 ```bash
-~/.claude/skills/{slug}/scripts/run.sh {default_args}
+~/.claude/skills/{slug}/scripts/run.sh {run_args}
 ```
 
 {params_section}{cli_section}"""
+
+
+def _cli_usage_args(spec: dict) -> str:
+    """从 request_modes 自动生成 CLI 参数示例，如 --mode=parse --url=<url>"""
+    modes = spec.get("request_modes", [])
+    if not modes:
+        return ""
+    mode = modes[0]
+    parts = [f"--mode={mode['name']}"]
+    for field in mode.get("fields", []):
+        flag = field["name"].replace("_", "-")
+        parts.append(f'--{flag}="<{field["name"]}>"')
+    return " ".join(parts)
 
 
 def render_readme(spec: dict) -> str:
     slug = spec["project_slug"]
     generate_cli = spec.get("generate_cli", True)
     summary = spec["summary"]
-    default_args = spec.get("default_cli_args", "").strip()
     trigger_phrases = spec.get("trigger_phrases", [slug, f"调用 {slug}", f"使用 {slug}"])
 
     mode_table = "| 模式 | 说明 |\n|------|------|\n"
@@ -279,6 +299,14 @@ def render_readme(spec: dict) -> str:
 
     trigger_list = "\n".join(f"- `{p}`" for p in trigger_phrases)
 
+    # CLI 用法：优先取 spec 第一条 example 的 command，否则自动生成
+    cli_examples = spec.get("examples", [])
+    if cli_examples:
+        cli_cmd = cli_examples[0]["command"]
+    else:
+        usage_args = spec.get("default_cli_args", "").strip() or _cli_usage_args(spec)
+        cli_cmd = f"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {usage_args}".rstrip()
+
     cli_section = ""
     if generate_cli:
         cli_section = f"""\
@@ -290,7 +318,7 @@ def render_readme(spec: dict) -> str:
 不需要安装 skill，一条命令直接调用：
 
 ```bash
-bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {default_args}
+{cli_cmd}
 ```
 """
 

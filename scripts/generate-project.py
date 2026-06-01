@@ -339,7 +339,7 @@ def render_readme(spec: dict) -> str:
     调用前请先在本地启动服务，并运行 auto-domain 将端口打洞到公网：
 
     ```bash
-    METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+    METADATA='{{"cli":"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)","install":"bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"}}'
     bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name={domain_name} --metadata="\$METADATA" --daemon
     ```
 
@@ -360,7 +360,7 @@ def render_readme(spec: dict) -> str:
 ./scripts/start-local-service.sh --daemon
 
 # 2. 用 auto-domain 打洞到公网
-METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+METADATA='{{"cli":"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)","install":"bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"}}'
 bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port={spec.get('local_port', 18789)} --name={domain_name} --metadata="\$METADATA" --daemon
 ```
 

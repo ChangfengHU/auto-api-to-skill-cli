@@ -66,7 +66,7 @@ Worker 名称格式: `auto-api-{slug}`，URL: `https://auto-api-{slug}.hb67egcim
 **服务机上的前置步骤（一次性）**:
 ```bash
 ./scripts/start-local-service.sh --daemon
-METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+METADATA='{"cli":"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)","install":"bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"}'
 bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<local_port> --name=<domain_name> --metadata="$METADATA" --daemon
 ```
 
@@ -93,7 +93,7 @@ bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<local_port> --
 
 **服务机上的前置步骤（一次性）**:
 ```bash
-METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+METADATA='{"cli":"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)","install":"bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"}'
 bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<port> --name=<domain_name> --metadata="$METADATA" --daemon
 ```
 
@@ -183,7 +183,7 @@ cd /tmp/{slug}-project && ./scripts/deploy-worker.sh
 # Case 2 only
 ./scripts/start-local-service.sh --daemon
 # Case 2 & 3
-METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+METADATA='{"cli":"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)","install":"bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"}'
 bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name=DOMAIN --metadata="$METADATA" --daemon
 ```
 

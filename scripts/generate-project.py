@@ -324,26 +324,27 @@ def render_readme(spec: dict) -> str:
 
     domain_name = spec.get("domain_name", spec.get("auto_domain_name", spec["project_slug"]))
     source_extra = ""
-    if spec["source_kind"] == "local_port":
+    elif spec["source_kind"] == "local_port":
         source_extra = f"""
----
+    ---
 
-## 本地服务说明
+    ## 本地服务说明
 
-本 skill 通过 auto-domain 隧道调用本地服务，公网地址固定为：
+    本 skill 通过 auto-domain 隧道调用本地服务，公网地址固定为：
 
-```
-https://{domain_name}.chxyka.ccwu.cc
-```
+    ```
+    https://{domain_name}.chxyka.ccwu.cc
+    ```
 
-调用前请先在本地启动服务，并运行 auto-domain 将端口打洞到公网：
+    调用前请先在本地启动服务，并运行 auto-domain 将端口打洞到公网：
 
-```bash
-bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name={domain_name} --daemon
-```
+    ```bash
+    METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+    bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name={domain_name} --metadata="\$METADATA" --daemon
+    ```
 
-Skill 本身不需要任何 `--port` 或 `--domain-name` 参数，直接 `--mode=...` 调用即可。
-"""
+    Skill 本身不需要任何 `--port` 或 `--domain-name` 参数，直接 `--mode=...` 调用即可。
+    """
     elif spec["source_kind"] == "script_service":
         source_extra = f"""
 ---
@@ -356,10 +357,11 @@ Skill 本身不需要任何 `--port` 或 `--domain-name` 参数，直接 `--mode
 
 ```bash
 # 1. 启动本地 HTTP bridge（包装 scripts/local-script.sh）
-./scripts/start-local-service.sh --port={spec.get('local_port', 18789)} --daemon
+./scripts/start-local-service.sh --daemon
 
 # 2. 用 auto-domain 打洞到公网
-bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port={spec.get('local_port', 18789)} --name={domain_name} --daemon
+METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port={spec.get('local_port', 18789)} --name={domain_name} --metadata="\$METADATA" --daemon
 ```
 
 之后在任何地方执行 skill，都会调用到这台机器上的本地脚本：

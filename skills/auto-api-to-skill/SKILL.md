@@ -66,7 +66,8 @@ Worker 名称格式: `auto-api-{slug}`，URL: `https://auto-api-{slug}.hb67egcim
 **服务机上的前置步骤（一次性）**:
 ```bash
 ./scripts/start-local-service.sh --daemon
-bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<local_port> --name=<domain_name> --daemon
+METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<local_port> --name=<domain_name> --metadata="$METADATA" --daemon
 ```
 
 **标准参考项目**: `auto-hello-heavy-skill` (https://github.com/ChangfengHU/auto-hello-heavy-skill)
@@ -92,7 +93,8 @@ bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<local_port> --
 
 **服务机上的前置步骤（一次性）**:
 ```bash
-bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<port> --name=<domain_name> --daemon
+METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<port> --name=<domain_name> --metadata="$METADATA" --daemon
 ```
 
 **标准参考项目**: `auto-hello-local-skill` (https://github.com/ChangfengHU/auto-hello-local-skill)
@@ -181,7 +183,8 @@ cd /tmp/{slug}-project && ./scripts/deploy-worker.sh
 # Case 2 only
 ./scripts/start-local-service.sh --daemon
 # Case 2 & 3
-bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name=DOMAIN --daemon
+METADATA="CLI: bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) | Skill: bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name=DOMAIN --metadata="$METADATA" --daemon
 ```
 
 ### Step 6: 输出最终结果

@@ -184,6 +184,18 @@ cd /tmp/{slug}-project && ./scripts/deploy-worker.sh
 bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name=DOMAIN --daemon
 ```
 
+### Step 6: 输出最终结果
+
+发布完成后，必须向用户输出以下两项成果：
+1. **Skill 安装命令**（供 AI 安装使用）：
+   ```bash
+   bash <(curl -fsSL 'https://skill.vyibc.com/install-{slug}.sh?ts=...')
+   ```
+2. **CLI 执行命令**（供终端直接调用）：
+   ```bash
+   bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) --mode=...
+   ```
+
 ---
 
 ## 环境变量（从 ~/.agent-brain-plugins.env 读取）

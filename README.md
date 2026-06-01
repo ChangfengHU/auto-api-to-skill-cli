@@ -37,6 +37,7 @@ CF Worker JS → wrangler 部署 → https://auto-api-{slug}.workers.dev → ski
 - "帮我把这个轻量函数做成 CF Worker skill，逻辑是：[描述逻辑]"
 - "这个功能可以在纯 JS 环境跑，帮我封装成全球可用的 skill"
 
+示例参考: [ChangfengHU/auto-greet-cf-skill](https://github.com/ChangfengHU/auto-greet-cf-skill) (或生成类似 auto-xhs-parse-skill)
 示例 spec: [examples/case1-cloudflare-worker/spec.json](examples/case1-cloudflare-worker/spec.json)
 
 ---
@@ -54,6 +55,7 @@ local-script.sh → Python HTTP bridge → auto-domain → 公网 URL → skill
 - "这个脚本只能在我自己的机器上跑（用了本地 nvm/conda/私有文件），帮我做成 skill"
 - "帮我把 [脚本路径] 这个脚本封装成 skill，它依赖我本机的环境，没法部署到云端"
 
+示例参考: [ChangfengHU/auto-hello-heavy-skill](https://github.com/ChangfengHU/auto-hello-heavy-skill)
 示例 spec: [examples/case2-script-service/spec.json](examples/case2-script-service/spec.json)
 
 ---
@@ -71,6 +73,7 @@ local-script.sh → Python HTTP bridge → auto-domain → 公网 URL → skill
 - "我有一个本地服务 localhost:PORT，帮我做成可以远程调用的 skill"
 - "帮我把本地运行的 [服务名] 服务（端口 PORT）发布成 skill"
 
+示例参考: [ChangfengHU/auto-hello-local-skill](https://github.com/ChangfengHU/auto-hello-local-skill)
 示例 spec: [examples/case3-local-port/spec.json](examples/case3-local-port/spec.json)
 
 ---
@@ -88,6 +91,7 @@ local-script.sh → Python HTTP bridge → auto-domain → 公网 URL → skill
 - "我有一个已经部署好的接口 [URL]，帮我做成 skill"
 - "这个第三方 API 我想让 Claude 直接调用，帮我封装成 skill"
 
+示例参考: [ChangfengHU/auto-hello-worker-skill](https://github.com/ChangfengHU/auto-hello-worker-skill)
 示例 spec: [examples/case4-public-api/spec.json](examples/case4-public-api/spec.json)
 
 ---

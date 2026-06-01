@@ -37,6 +37,8 @@ cd <output>/  && ./scripts/deploy-worker.sh
 
 Worker 名称格式: `auto-api-{slug}`，URL: `https://auto-api-{slug}.hb67egcim4.workers.dev`
 
+**标准参考项目**: `auto-greet-cf-skill` (如 https://github.com/ChangfengHU/auto-xhs-parse-skill)
+
 ---
 
 ### Case 2: `script_service` — 重量级本地脚本 → HTTP bridge → auto-domain
@@ -67,6 +69,8 @@ Worker 名称格式: `auto-api-{slug}`，URL: `https://auto-api-{slug}.hb67egcim
 bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<local_port> --name=<domain_name> --daemon
 ```
 
+**标准参考项目**: `auto-hello-heavy-skill` (https://github.com/ChangfengHU/auto-hello-heavy-skill)
+
 ---
 
 ### Case 3: `local_port` — 本地已有 HTTP 服务 → auto-domain
@@ -91,6 +95,8 @@ bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<local_port> --
 bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<port> --name=<domain_name> --daemon
 ```
 
+**标准参考项目**: `auto-hello-local-skill` (https://github.com/ChangfengHU/auto-hello-local-skill)
+
 ---
 
 ### Case 4: `public_api` — 已有公网 API → 直接包装
@@ -109,6 +115,8 @@ bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=<port> --name=<
   "request_modes": [{ "name": "run", "transport": "json", "fields": [...] }]
 }
 ```
+
+**标准参考项目**: `auto-hello-worker-skill` (https://github.com/ChangfengHU/auto-hello-worker-skill)
 
 ---
 

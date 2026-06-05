@@ -208,6 +208,8 @@ def render_skill_md(spec: dict) -> str:
     trigger_phrases = spec.get("trigger_phrases", [slug, f"调用 {slug}", f"使用 {slug}"])
     trigger_str = "、".join(f'"{p}"' for p in trigger_phrases)
     skill_description = spec.get("skill_description", f"当用户说{trigger_str} 时自动触发。{summary}")
+    cli_example = spec.get("cli_example", f"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)")
+    default_args = spec.get("default_cli_args", "").strip()
 
     modes = spec.get("request_modes", [])
     param_rows = ""
@@ -225,23 +227,13 @@ def render_skill_md(spec: dict) -> str:
 {param_rows}
 """
 
-    # 执行示例参数：优先 default_cli_args，否则自动生成
-    run_args = spec.get("default_cli_args", "").strip() or _cli_usage_args(spec)
-
-    # CLI 示例：优先 spec 第一条 example，否则自动生成
-    cli_examples = spec.get("examples", [])
-    if cli_examples:
-        cli_cmd = cli_examples[0]["command"]
-    else:
-        cli_cmd = f"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {run_args}".rstrip()
-
     cli_section = ""
     if spec.get("generate_cli", True):
         cli_section = f"""\
 ## 直接执行
 
 ```bash
-{cli_cmd}
+{cli_example}
 ```
 
 """
@@ -261,29 +253,17 @@ description: "{skill_description}"
 ## 执行
 
 ```bash
-~/.claude/skills/{slug}/scripts/run.sh {run_args}
+~/.claude/skills/{slug}/scripts/run.sh {default_args}
 ```
 
 {params_section}{cli_section}"""
-
-
-def _cli_usage_args(spec: dict) -> str:
-    """从 request_modes 自动生成 CLI 参数示例，如 --mode=parse --url=<url>"""
-    modes = spec.get("request_modes", [])
-    if not modes:
-        return ""
-    mode = modes[0]
-    parts = [f"--mode={mode['name']}"]
-    for field in mode.get("fields", []):
-        flag = field["name"].replace("_", "-")
-        parts.append(f'--{flag}="<{field["name"]}>"')
-    return " ".join(parts)
 
 
 def render_readme(spec: dict) -> str:
     slug = spec["project_slug"]
     generate_cli = spec.get("generate_cli", True)
     summary = spec["summary"]
+    default_args = spec.get("default_cli_args", "").strip()
     trigger_phrases = spec.get("trigger_phrases", [slug, f"调用 {slug}", f"使用 {slug}"])
 
     mode_table = "| 模式 | 说明 |\n|------|------|\n"
@@ -299,14 +279,6 @@ def render_readme(spec: dict) -> str:
 
     trigger_list = "\n".join(f"- `{p}`" for p in trigger_phrases)
 
-    # CLI 用法：优先取 spec 第一条 example 的 command，否则自动生成
-    cli_examples = spec.get("examples", [])
-    if cli_examples:
-        cli_cmd = cli_examples[0]["command"]
-    else:
-        usage_args = spec.get("default_cli_args", "").strip() or _cli_usage_args(spec)
-        cli_cmd = f"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {usage_args}".rstrip()
-
     cli_section = ""
     if generate_cli:
         cli_section = f"""\
@@ -318,33 +290,32 @@ def render_readme(spec: dict) -> str:
 不需要安装 skill，一条命令直接调用：
 
 ```bash
-{cli_cmd}
+bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh) {default_args}
 ```
 """
 
     domain_name = spec.get("domain_name", spec.get("auto_domain_name", spec["project_slug"]))
     source_extra = ""
-    elif spec["source_kind"] == "local_port":
+    if spec["source_kind"] == "local_port":
         source_extra = f"""
-    ---
+---
 
-    ## 本地服务说明
+## 本地服务说明
 
-    本 skill 通过 auto-domain 隧道调用本地服务，公网地址固定为：
+本 skill 通过 auto-domain 隧道调用本地服务，公网地址固定为：
 
-    ```
-    https://{domain_name}.chxyka.ccwu.cc
-    ```
+```
+https://{domain_name}.chxyka.ccwu.cc
+```
 
-    调用前请先在本地启动服务，并运行 auto-domain 将端口打洞到公网：
+调用前请先在本地启动服务，并运行 auto-domain 将端口打洞到公网：
 
-    ```bash
-    METADATA='{{"cli":"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)","install":"bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"}}'
-    bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name={domain_name} --metadata="\$METADATA" --daemon
-    ```
+```bash
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port=PORT --name={domain_name} --daemon
+```
 
-    Skill 本身不需要任何 `--port` 或 `--domain-name` 参数，直接 `--mode=...` 调用即可。
-    """
+Skill 本身不需要任何 `--port` 或 `--domain-name` 参数，直接 `--mode=...` 调用即可。
+"""
     elif spec["source_kind"] == "script_service":
         source_extra = f"""
 ---
@@ -357,11 +328,10 @@ def render_readme(spec: dict) -> str:
 
 ```bash
 # 1. 启动本地 HTTP bridge（包装 scripts/local-script.sh）
-./scripts/start-local-service.sh --daemon
+./scripts/start-local-service.sh --port={spec.get('local_port', 18789)} --daemon
 
 # 2. 用 auto-domain 打洞到公网
-METADATA='{{"cli":"bash <(curl -fsSL https://skill.vyibc.com/{slug}.sh)","install":"bash <(curl -fsSL https://skill.vyibc.com/install-{slug}.sh)"}}'
-bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port={spec.get('local_port', 18789)} --name={domain_name} --metadata="\$METADATA" --daemon
+bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) --port={spec.get('local_port', 18789)} --name={domain_name} --daemon
 ```
 
 之后在任何地方执行 skill，都会调用到这台机器上的本地脚本：
@@ -516,31 +486,85 @@ def render_http_run(spec: dict, endpoint_expression: str, source_header: str, ex
             "fi",
         ]
 
-    # mode case blocks
+    # payload builder (flat JSON from --field flags), shared by json/async modes
+    def _payload_line(field_names, data_init):
+        env_assign = " ".join(f'{mode_var(n)}="${{{mode_var(n)}}}"' for n in field_names)
+        keys_expr = json.dumps(field_names)
+        return (
+            f"  PAYLOAD=$({env_assign} python3 -c 'import json, os; keys = {keys_expr}; "
+            f"data = {data_init}; [data.__setitem__(key, os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
+            f"or os.environ.get(key.upper().replace(\"-\", \"_\"))) for key in keys "
+            f"if (os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
+            f"or os.environ.get(key.upper().replace(\"-\", \"_\")))]; print(json.dumps(data))')"
+        )
+
+    # mode case blocks — each mode may carry its own `path` (multi-path workers)
+    # and may use transport "async" (POST -> poll GET until done).
     mode_case_lines: list[str] = []
     for mode in modes:
         field_names = [f["name"] for f in mode.get("fields", [])]
+        mode_path = mode.get("path", "")
+        mode_url = '"$ENDPOINT"' if not mode_path else f'"${{ENDPOINT}}{mode_path}"'
+        transport = mode.get("transport", "json")
+        data_init = f'{{"mode": "{mode["name"]}"}}' if include_mode else '{}'
         mode_case_lines.append(f'{mode["name"]})')
-        if mode["transport"] == "json":
-            env_assign = " ".join(f'{mode_var(n)}="${{{mode_var(n)}}}"' for n in field_names)
-            keys_expr = json.dumps(field_names)
-            data_init = f'{{"mode": "{mode["name"]}"}}' if include_mode else '{}'
+        if transport == "async":
+            poll_path = mode.get("poll_path", "/{id}")
+            id_field = mode.get("id_field", "id")
+            status_field = mode.get("status_field", "status")
+            output_field = mode.get("output_field", "output")
+            done_values = mode.get("done_values", ["complete", "completed", "success", "succeeded"])
+            error_values = mode.get("error_values", ["errored", "terminated", "failed", "error"])
+            interval = int(mode.get("poll_interval", 3))
+            max_polls = int(mode.get("max_polls", 80))
+            poll_url = f'"${{ENDPOINT}}{poll_path.replace("{id}", "$ASYNC_ID")}"'
+            done_pat = "|".join(done_values)
+            err_pat = "|".join(error_values)
+            mode_case_lines.append(_payload_line(field_names, data_init))
             mode_case_lines.append(
-                f"  PAYLOAD=$({env_assign} python3 -c 'import json, os; keys = {keys_expr}; "
-                f"data = {data_init}; [data.__setitem__(key, os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
-                f"or os.environ.get(key.upper().replace(\"-\", \"_\"))) for key in keys "
-                f"if (os.environ.get(key.upper().replace(\"-\", \"_\").replace(\".\", \"_\")) "
-                f"or os.environ.get(key.upper().replace(\"-\", \"_\")))]; print(json.dumps(data))')"
+                f'  SUBMIT=$(curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L {mode_url}'
+                ' ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"}'
+                ' -H "Content-Type: application/json" -d "$PAYLOAD")'
             )
             mode_case_lines.append(
-                '  curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L'
-                ' "$ENDPOINT" ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"}'
+                "  ASYNC_ID=$(printf '%s' \"$SUBMIT\" | python3 -c "
+                f"\"import json,sys; print(json.load(sys.stdin).get('{id_field}',''))\" 2>/dev/null)"
+            )
+            mode_case_lines.append('  if [[ -z "$ASYNC_ID" ]]; then echo "submit failed: $SUBMIT" >&2; exit 1; fi')
+            mode_case_lines.append('  echo "submitted id=$ASYNC_ID, polling..." >&2')
+            mode_case_lines.append(f'  for _i in $(seq 1 {max_polls}); do')
+            mode_case_lines.append(f'    sleep {interval}')
+            mode_case_lines.append(
+                f'    RESP=$(curl --connect-timeout 10 --max-time 60 -sS -L {poll_url}'
+                ' ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"})'
+            )
+            mode_case_lines.append(
+                "    ST=$(printf '%s' \"$RESP\" | python3 -c "
+                f"\"import json,sys; print(json.load(sys.stdin).get('{status_field}',''))\" 2>/dev/null)"
+            )
+            mode_case_lines.append('    echo "  status=$ST" >&2')
+            mode_case_lines.append('    case "$ST" in')
+            mode_case_lines.append(
+                f"      {done_pat}) printf '%s' \"$RESP\" | python3 -c "
+                f"\"import json,sys; d=json.load(sys.stdin); o=d.get('{output_field}'); "
+                "print(json.dumps(o,ensure_ascii=False,indent=2) if o is not None else json.dumps(d,ensure_ascii=False,indent=2))\""
+                "; exit 0 ;;"
+            )
+            mode_case_lines.append(f'      {err_pat}) echo "task failed: $RESP" >&2; exit 1 ;;')
+            mode_case_lines.append('    esac')
+            mode_case_lines.append('  done')
+            mode_case_lines.append('  echo "timeout waiting for $ASYNC_ID" >&2; exit 1')
+        elif transport == "json":
+            mode_case_lines.append(_payload_line(field_names, data_init))
+            mode_case_lines.append(
+                f'  curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L {mode_url}'
+                ' ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"}'
                 ' -H "Content-Type: application/json" -d "$PAYLOAD"'
             )
         else:
             mode_case_lines.append(
-                '  curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L'
-                ' "$ENDPOINT" ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"} \\'
+                f'  curl --connect-timeout 10 --max-time 60 --fail-with-body -sS -L {mode_url}'
+                ' ${COMMON_HEADERS[@]+"${COMMON_HEADERS[@]}"} \\'
             )
             for field in mode.get("fields", []):
                 vname = mode_var(field["name"])
@@ -768,7 +792,7 @@ def worker_url(slug: str) -> str:
 def render_worker_js(spec: dict) -> str:
     code = spec.get("worker_code", "")
     if code:
-        return code if "export default" in code else f"export default {{\n  async fetch(request, env) {{\n    {code}\n  }}\n}};\n"
+        return code if code.strip().startswith("export default") else f"export default {{\n  async fetch(request, env) {{\n    {code}\n  }}\n}};\n"
     # default hello worker
     return """\
 export default {
@@ -786,8 +810,9 @@ def render_wrangler_toml(spec: dict) -> str:
     name = worker_name(slug)
     lines = [
         f'name = "{name}"',
-        'main = "src/worker.mjs"',
+        'main = "src/worker.js"',
         'compatibility_date = "2024-11-01"',
+        'compatibility_flags = ["nodejs_compat"]',
     ]
     return "\n".join(lines) + "\n"
 
@@ -818,6 +843,7 @@ def render_deploy_worker_sh(spec: dict) -> str:
         "  npm install --silent wrangler",
         "fi",
         "",
+        'WRANGLER="${{ command -v wrangler >/dev/null 2>&1 && echo wrangler || echo ./node_modules/.bin/wrangler }}"',
         'WRANGLER="$(command -v wrangler 2>/dev/null || echo ./node_modules/.bin/wrangler)"',
         "",
         'CLOUDFLARE_EMAIL="$CF_EMAIL" CLOUDFLARE_API_KEY="$CF_API_KEY" \\',
@@ -871,7 +897,7 @@ def render_generated_project(spec: dict, out_dir: pathlib.Path) -> None:
         write(out_dir / "scripts" / "local-script.sh", render_local_script(spec), executable=True)
     elif spec["source_kind"] == "cloudflare_worker":
         run_script = render_cloudflare_worker_run(spec)
-        write(out_dir / "worker" / "src" / "worker.mjs", render_worker_js(spec))
+        write(out_dir / "worker" / "src" / "worker.js", render_worker_js(spec))
         write(out_dir / "worker" / "wrangler.toml", render_wrangler_toml(spec))
         write(out_dir / "scripts" / "deploy-worker.sh", render_deploy_worker_sh(spec), executable=True)
     else:

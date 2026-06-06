@@ -103,8 +103,13 @@ def render_publish_remote(repo_name: str, subdir: str = "") -> str:
         WORK_DIR="$(mktemp -d /tmp/publish-{repo_name}-XXXXXX)"
         trap 'rm -rf "$WORK_DIR"' EXIT
 
+        # 私有仓库需要 token：设置 GITHUB_TOKEN 或 CHANGFENG_TOKEN 即可（公开仓库可留空）
+        GH_AUTH=()
+        _GH_TOKEN="${{GITHUB_TOKEN:-${{CHANGFENG_TOKEN:-}}}}"
+        [[ -n "$_GH_TOKEN" ]] && GH_AUTH=(-H "Authorization: Bearer $_GH_TOKEN")
+
         echo "Fetching ${{REPO_OWNER}}/${{REPO_NAME}}@${{REPO_REF}} ..."
-        curl -fsSL "$TARBALL_URL" -o "$WORK_DIR/repo.tar.gz"
+        curl -fsSL ${{GH_AUTH[@]+"${{GH_AUTH[@]}}"}} "$TARBALL_URL" -o "$WORK_DIR/repo.tar.gz"
         tar -xzf "$WORK_DIR/repo.tar.gz" -C "$WORK_DIR"
 
         REPO_DIR="$(find "$WORK_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"

@@ -87,7 +87,7 @@ def render_upload_file() -> str:
     )
 
 
-def render_publish_remote(repo_name: str) -> str:
+def render_publish_remote(repo_name: str, subdir: str = "") -> str:
     return textwrap.dedent(
         f"""\
         #!/usr/bin/env bash
@@ -96,6 +96,8 @@ def render_publish_remote(repo_name: str) -> str:
         REPO_OWNER="${{REPO_OWNER:-ChangfengHU}}"
         REPO_NAME="${{REPO_NAME:-{repo_name}}}"
         REPO_REF="${{REPO_REF:-main}}"
+        # 当 skill 项目位于 monorepo 子目录时，REPO_SUBDIR 指向该子目录。
+        REPO_SUBDIR="${{REPO_SUBDIR:-{subdir}}}"
         TARBALL_URL="${{TARBALL_URL:-https://codeload.github.com/${{REPO_OWNER}}/${{REPO_NAME}}/tar.gz/refs/heads/${{REPO_REF}}}}"
 
         WORK_DIR="$(mktemp -d /tmp/publish-{repo_name}-XXXXXX)"
@@ -106,6 +108,7 @@ def render_publish_remote(repo_name: str) -> str:
         tar -xzf "$WORK_DIR/repo.tar.gz" -C "$WORK_DIR"
 
         REPO_DIR="$(find "$WORK_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
+        [[ -n "$REPO_SUBDIR" ]] && REPO_DIR="$REPO_DIR/$REPO_SUBDIR"
         if [[ -z "$REPO_DIR" || ! -x "$REPO_DIR/scripts/publish-skill.sh" ]]; then
           echo "publish-skill.sh not found in fetched repository" >&2
           exit 1
@@ -881,7 +884,7 @@ def render_generated_project(spec: dict, out_dir: pathlib.Path) -> None:
     write(out_dir / ".gitignore", render_gitignore())
     if spec.get("generate_cli", True):
         write(out_dir / "scripts" / f"{slug}.sh", render_wrapper(slug), executable=True)
-    write(out_dir / "scripts" / f"publish-{slug}.sh", render_publish_remote(repo_name), executable=True)
+    write(out_dir / "scripts" / f"publish-{slug}.sh", render_publish_remote(repo_name, spec.get("repo_subdir", "")), executable=True)
     write(out_dir / "scripts" / "publish-skill.sh", render_publish_local(spec), executable=True)
     write(out_dir / "scripts" / "upload-file.sh", render_upload_file(), executable=True)
     write(out_dir / "skills" / slug / "SKILL.md", render_skill_md(spec))

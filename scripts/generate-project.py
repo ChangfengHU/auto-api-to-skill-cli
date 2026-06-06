@@ -260,11 +260,15 @@ description: "{skill_description}"
 
 ## 执行
 
+可在任意机器运行（脚本是远程 worker 的 curl 封装，依赖 bash + curl + python3）：
+
 ```bash
-~/.claude/skills/{slug}/scripts/run.sh {default_args}
+{cli_example} {default_args}
 ```
 
-{params_section}{cli_section}"""
+> 已安装本 skill 时，等价于运行 skill 目录内的 `scripts/run.sh {default_args}`（具体路径随安装的工具而定，如 `~/.claude/skills/`、`~/.cursor/skills/` 等）。
+
+{params_section}"""
 
 
 def render_readme(spec: dict) -> str:
